@@ -27,7 +27,7 @@ sed -i'~' -e '
 for i in $@; do
   if ! cmp -s $i $i~ ; then
     # goimports will adjust indentation and add any necessary import.
-    goimports -w $i
+    go run golang.org/x/tools/cmd/goimports@latest -w $i
   fi
   rm -f $i~
 done
