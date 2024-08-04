@@ -6,7 +6,7 @@ rate limiting.
  - [Queue](https://github.com/cockroachdb/crlib/blob/main/fifo/queue.go) implements an
    allocation efficient FIFO queue.
 
- - [Semaphore](https://github.com/cockroachdb/crlib/blob/main/fifo/queue.go)
+ - [Semaphore](https://github.com/cockroachdb/crlib/blob/main/fifo/semaphore.go)
    implements a weighted, dynamically reconfigurable semaphore which respects
    context cancellation.
 
