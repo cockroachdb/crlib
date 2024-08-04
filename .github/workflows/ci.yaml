@@ -24,7 +24,7 @@ jobs:
         with:
           go-version: "${{ matrix.go }}"
 
-      # - run: go test -tags crlib_invariants ./...
+      - run: go test -tags crlib_invariants ./...
       - run: go test ./...
       - run: go vet ./...
 
@@ -42,7 +42,7 @@ jobs:
         with:
           go-version: "${{ matrix.go }}"
 
-      # - run: go test -tags crlib_invariants ./...
+      - run: go test -tags crlib_invariants ./...
       - run: go test ./...
 
   darwin:
@@ -59,7 +59,7 @@ jobs:
         with:
           go-version: "${{ matrix.go }}"
 
-      # - run: go test -tags crlib_invariants ./...
+      - run: go test -tags crlib_invariants ./...
       - run: go test ./...
 
   linux-stress:
@@ -77,7 +77,7 @@ jobs:
           go-version: "${{ matrix.go }}"
 
       - run: go install github.com/cockroachdb/stress@latest
-      # - run: go test -tags crlib_invariants ./... -exec 'stress -p 2 -maxruns 1000' -v
+      - run: go test -tags crlib_invariants ./... -exec 'stress -p 2 -maxruns 1000' -v
       - run: go test ./... -exec 'stress -p 2 -maxruns 1000' -v
 
   linux-stress-race:
@@ -95,5 +95,5 @@ jobs:
           go-version: "${{ matrix.go }}"
 
       - run: go install github.com/cockroachdb/stress@latest
-      # - run: go test -tags crlib_invariants ./... -race -exec 'stress -p 1 -maxruns 100' -v
+      - run: go test -tags crlib_invariants ./... -race -exec 'stress -p 1 -maxruns 100' -v
       - run: go test ./... -race -exec 'stress -p 1 -maxruns 100' -v
