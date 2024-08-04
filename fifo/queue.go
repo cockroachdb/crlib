@@ -30,7 +30,8 @@ import (
 //
 // The queue is implemented as a linked list of nodes, where each node is a
 // small ring buffer. The nodes are allocated using a sync.Pool (a single pool
-// is created for any given type and is used for all queues of that type).
+// should be created for any given type and is used for all queues of that
+// type).
 type Queue[T any] struct {
 	len        int
 	head, tail *queueNode[T]
