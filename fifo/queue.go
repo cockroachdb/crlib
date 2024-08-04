@@ -15,8 +15,9 @@
 package fifo
 
 import (
-	"github.com/cockroachdb/crlib/internal/invariants"
 	"sync"
+
+	"github.com/cockroachdb/crlib/internal/invariants"
 )
 
 // Queue implements an allocation efficient FIFO queue. It is not safe for

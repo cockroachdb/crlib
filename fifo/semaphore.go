@@ -18,8 +18,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/cockroachdb/crlib/internal/invariants"
 	"sync"
+
+	"github.com/cockroachdb/crlib/internal/invariants"
 )
 
 // Semaphore implements a weighted, dynamically reconfigurable semaphore which
@@ -63,6 +64,8 @@ func NewSemaphore(capacity int64) *Semaphore {
 
 var semaQueuePool = MakeQueueBackingPool[semaWaiter]()
 
+// ErrRequestExceedsCapacity is returned when an Acquire requests more than the
+// current capacity of the semaphore.
 var ErrRequestExceedsCapacity = errors.New("request exceeds semaphore capacity")
 
 // TryAcquire attempts to acquire n units from the semaphore without waiting. On
