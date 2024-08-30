@@ -23,3 +23,6 @@ go.work.sum
 
 .idea/
 
+# Bazel files, generated with 'make gen-bazel'.
+/WORKSPACE
+BUILD.bazel
