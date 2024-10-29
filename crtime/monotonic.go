@@ -40,6 +40,12 @@ func (m Mono) Elapsed() time.Duration {
 	return time.Duration(NowMono() - m)
 }
 
+// MonoFromTime converts a time.Time to a Mono value. If the time has a
+// monotonic component, it is used.
+func MonoFromTime(t time.Time) Mono {
+	return Mono(t.Sub(startTime))
+}
+
 // We use startTime as a reference point against which we can call
 // time.Since(). This solution is suggested by the Go runtime code:
 // https://github.com/golang/go/blob/889abb17e125bb0f5d8de61bb80ef15fbe2a130d/src/runtime/time_nofake.go#L19
