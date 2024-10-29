@@ -30,6 +30,11 @@ func NowMono() Mono {
 	return Mono(time.Since(startTime))
 }
 
+// Sub returns the duration that elapsed between two moments.
+func (m Mono) Sub(other Mono) time.Duration {
+	return time.Duration(m - other)
+}
+
 // Elapsed returns the duration that elapsed since m.
 func (m Mono) Elapsed() time.Duration {
 	return time.Duration(NowMono() - m)
