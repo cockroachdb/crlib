@@ -14,7 +14,11 @@
 
 package crtime
 
-import "time"
+import (
+	"time"
+
+	"github.com/cockroachdb/crlib/crsync"
+)
 
 // Mono represents a moment in time in terms of a monotonic clock. Its value is
 // the duration since the start of the process.
@@ -45,6 +49,9 @@ func (m Mono) Elapsed() time.Duration {
 func MonoFromTime(t time.Time) Mono {
 	return Mono(t.Sub(startTime))
 }
+
+// AtomicMono provides atomic access to a Mono value.
+type AtomicMono = crsync.TypedAtomicInt64[Mono]
 
 // We use startTime as a reference point against which we can call
 // time.Since(). This solution is suggested by the Go runtime code:
