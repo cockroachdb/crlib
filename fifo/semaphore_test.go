@@ -22,14 +22,16 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/cockroachdb/crlib/testutils/require"
 )
 
 func TestSemaphoreAPI(t *testing.T) {
 	s := NewSemaphore(10)
-	requireEqual(t, s.TryAcquire(5), true)
-	requireEqual(t, s.TryAcquire(10), false)
-	requireEqual(t, s.Acquire(context.Background(), 20), ErrRequestExceedsCapacity)
-	requireEqual(t, "capacity: 10, outstanding: 5, num-had-to-wait: 0", s.Stats().String())
+	require.Equal(t, s.TryAcquire(5), true)
+	require.Equal(t, s.TryAcquire(10), false)
+	require.Equal(t, s.Acquire(context.Background(), 20), ErrRequestExceedsCapacity)
+	require.Equal(t, "capacity: 10, outstanding: 5, num-had-to-wait: 0", s.Stats().String())
 
 	ch := make(chan struct{}, 10)
 	go func() {
@@ -46,15 +48,15 @@ func TestSemaphoreAPI(t *testing.T) {
 		}
 		ch <- struct{}{}
 	}()
-	assertNoRecv(t, ch)
+	require.NoRecv(t, ch)
 	s.Release(5)
-	assertRecv(t, ch)
-	assertRecv(t, ch)
-	assertNoRecv(t, ch)
+	require.Recv(t, ch)
+	require.Recv(t, ch)
+	require.NoRecv(t, ch)
 	s.Release(1)
-	assertNoRecv(t, ch)
+	require.NoRecv(t, ch)
 	s.Release(8)
-	assertRecv(t, ch)
+	require.Recv(t, ch)
 
 	// Test UpdateCapacity.
 	go func() {
@@ -66,16 +68,16 @@ func TestSemaphoreAPI(t *testing.T) {
 			t.Error(err)
 		}
 		ch <- struct{}{}
-		requireEqual(t, s.Acquire(context.Background(), 5), ErrRequestExceedsCapacity)
+		require.Equal(t, s.Acquire(context.Background(), 5), ErrRequestExceedsCapacity)
 		ch <- struct{}{}
 	}()
-	assertNoRecv(t, ch)
+	require.NoRecv(t, ch)
 	s.UpdateCapacity(15)
-	assertRecv(t, ch)
-	assertRecv(t, ch)
-	assertNoRecv(t, ch)
+	require.Recv(t, ch)
+	require.Recv(t, ch)
+	require.NoRecv(t, ch)
 	s.UpdateCapacity(2)
-	assertRecv(t, ch)
+	require.Recv(t, ch)
 }
 
 // TestSemaphoreBasic is a test with multiple goroutines acquiring a unit and
@@ -103,7 +105,7 @@ func TestSemaphoreBasic(t *testing.T) {
 			}
 
 			for i := 0; i < numGoroutines; i++ {
-				if err := assertRecv(t, resCh); err != nil {
+				if err := require.Recv(t, resCh); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -132,14 +134,14 @@ func TestSemaphoreContextCancellation(t *testing.T) {
 
 	cancel()
 
-	err := assertRecv(t, errCh)
+	err := require.Recv(t, errCh)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected context cancellation error, got %v", err)
 	}
 
 	stats := s.Stats()
-	requireEqual(t, stats.Capacity, 1)
-	requireEqual(t, stats.Outstanding, 1)
+	require.Equal(t, stats.Capacity, 1)
+	require.Equal(t, stats.Outstanding, 1)
 }
 
 // TestSemaphoreCanceledAcquisitions tests the behavior where we enqueue
@@ -163,7 +165,7 @@ func TestSemaphoreCanceledAcquisitions(t *testing.T) {
 	}
 
 	for i := 0; i < numGoroutines; i++ {
-		if err := assertRecv(t, errCh); !errors.Is(err, context.Canceled) {
+		if err := require.Recv(t, errCh); !errors.Is(err, context.Canceled) {
 			t.Fatalf("expected context cancellation error, got %v", err)
 		}
 	}
@@ -173,7 +175,7 @@ func TestSemaphoreCanceledAcquisitions(t *testing.T) {
 		errCh <- s.Acquire(context.Background(), 1)
 	}()
 
-	if err := assertRecv(t, errCh); err != nil {
+	if err := require.Recv(t, errCh); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -206,25 +208,25 @@ func TestSemaphoreNumHadToWait(t *testing.T) {
 		}
 	}
 	// Initially s should have no waiters.
-	requireEqual(t, s.Stats().NumHadToWait, 0)
+	require.Equal(t, s.Stats().NumHadToWait, 0)
 	if err := s.Acquire(ctx, 1); err != nil {
 		t.Fatal(err)
 	}
 	// Still no waiters.
-	requireEqual(t, s.Stats().NumHadToWait, 0)
+	require.Equal(t, s.Stats().NumHadToWait, 0)
 	for i := 0; i < 10; i++ {
 		go doAcquire(ctx)
 	}
 	assertNumWaitersSoon(10)
 	s.Release(1)
-	assertRecv(t, doneCh)
+	require.Recv(t, doneCh)
 	go doAcquire(ctx)
 	assertNumWaitersSoon(11)
 	for i := 0; i < 10; i++ {
 		s.Release(1)
-		assertRecv(t, doneCh)
+		require.Recv(t, doneCh)
 	}
-	requireEqual(t, s.Stats().NumHadToWait, 11)
+	require.Equal(t, s.Stats().NumHadToWait, 11)
 }
 
 func TestConcurrentUpdatesAndAcquisitions(t *testing.T) {
@@ -258,26 +260,6 @@ func TestConcurrentUpdatesAndAcquisitions(t *testing.T) {
 	wg.Wait()
 	s.UpdateCapacity(maxCap)
 	stats := s.Stats()
-	requireEqual(t, stats.Capacity, 100)
-	requireEqual(t, stats.Outstanding, 0)
-}
-
-func assertRecv[T any](t *testing.T, ch chan T) T {
-	t.Helper()
-	select {
-	case v := <-ch:
-		return v
-	case <-time.After(time.Second):
-		t.Fatal("did not receive notification")
-		panic("unreachable")
-	}
-}
-
-func assertNoRecv[T any](t *testing.T, ch chan T) {
-	t.Helper()
-	select {
-	case <-ch:
-		t.Fatal("received unexpected notification")
-	case <-time.After(10 * time.Millisecond):
-	}
+	require.Equal(t, stats.Capacity, 100)
+	require.Equal(t, stats.Outstanding, 0)
 }

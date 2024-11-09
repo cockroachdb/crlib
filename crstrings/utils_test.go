@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/cockroachdb/crlib/testutils/require"
 )
 
 type num int
@@ -28,10 +30,10 @@ func (n num) String() string {
 
 func TestJoinStringers(t *testing.T) {
 	nums := []num{0, 1, 2, 3}
-	expect(t, "", JoinStringers(", ", nums[:0]...))
-	expect(t, "000", JoinStringers(", ", nums[0]))
-	expect(t, "000, 001", JoinStringers(", ", nums[0], nums[1]))
-	expect(t, "000, 001, 002, 003", JoinStringers(", ", nums...))
+	require.Equal(t, "", JoinStringers(", ", nums[:0]...))
+	require.Equal(t, "000", JoinStringers(", ", nums[0]))
+	require.Equal(t, "000, 001", JoinStringers(", ", nums[0], nums[1]))
+	require.Equal(t, "000, 001, 002, 003", JoinStringers(", ", nums...))
 }
 
 func TestMapAndJoin(t *testing.T) {
@@ -39,45 +41,38 @@ func TestMapAndJoin(t *testing.T) {
 	fn := func(n int) string {
 		return fmt.Sprintf("%d", n)
 	}
-	expect(t, "", MapAndJoin(fn, ", ", nums[:0]...))
-	expect(t, "0", MapAndJoin(fn, ", ", nums[0]))
-	expect(t, "0, 1", MapAndJoin(fn, ", ", nums[0], nums[1]))
-	expect(t, "0, 1, 2, 3", MapAndJoin(fn, ", ", nums...))
-}
-
-func expect(t *testing.T, expected, actual string) {
-	t.Helper()
-	if actual != expected {
-		t.Errorf("expected %q got %q", expected, actual)
-	}
+	require.Equal(t, "", MapAndJoin(fn, ", ", nums[:0]...))
+	require.Equal(t, "0", MapAndJoin(fn, ", ", nums[0]))
+	require.Equal(t, "0, 1", MapAndJoin(fn, ", ", nums[0], nums[1]))
+	require.Equal(t, "0, 1, 2, 3", MapAndJoin(fn, ", ", nums...))
 }
 
 func TestIf(t *testing.T) {
-	expect(t, "", If(false, "true"))
-	expect(t, "true", If(true, "true"))
+	require.Equal(t, "", If(false, "true"))
+	require.Equal(t, "true", If(true, "true"))
 }
 
 func TestIfElse(t *testing.T) {
-	expect(t, "false", IfElse(false, "true", "false"))
-	expect(t, "true", IfElse(true, "true", "false"))
+	require.Equal(t, "false", IfElse(false, "true", "false"))
+	require.Equal(t, "true", IfElse(true, "true", "false"))
 }
 
 func TestWithSep(t *testing.T) {
-	expect(t, "a,b", WithSep("a", ",", "b"))
-	expect(t, "a", WithSep("a", ",", ""))
-	expect(t, "b", WithSep("", ",", "b"))
+	require.Equal(t, "a,b", WithSep("a", ",", "b"))
+	require.Equal(t, "a", WithSep("a", ",", ""))
+	require.Equal(t, "b", WithSep("", ",", "b"))
 }
 
 func TestFilterEmpty(t *testing.T) {
 	s := []string{"a", "", "b", "", "c", ""}
-	expect(t, "a,b,c", strings.Join(FilterEmpty(s), ","))
+	require.Equal(t, "a,b,c", strings.Join(FilterEmpty(s), ","))
 }
 
 func TestLines(t *testing.T) {
-	expect(t, `["a" "b" "c"]`, fmt.Sprintf("%q", Lines("a\nb\nc")))
-	expect(t, `["a" "b" "c"]`, fmt.Sprintf("%q", Lines("a\nb\nc\n")))
-	expect(t, `["a" "b" "c" ""]`, fmt.Sprintf("%q", Lines("a\nb\nc\n\n")))
-	expect(t, `["" "a" "b" "c"]`, fmt.Sprintf("%q", Lines("\na\nb\nc\n")))
-	expect(t, `[]`, fmt.Sprintf("%q", Lines("")))
-	expect(t, `[]`, fmt.Sprintf("%q", Lines("\n")))
+	require.Equal(t, `["a" "b" "c"]`, fmt.Sprintf("%q", Lines("a\nb\nc")))
+	require.Equal(t, `["a" "b" "c"]`, fmt.Sprintf("%q", Lines("a\nb\nc\n")))
+	require.Equal(t, `["a" "b" "c" ""]`, fmt.Sprintf("%q", Lines("a\nb\nc\n\n")))
+	require.Equal(t, `["" "a" "b" "c"]`, fmt.Sprintf("%q", Lines("\na\nb\nc\n")))
+	require.Equal(t, `[]`, fmt.Sprintf("%q", Lines("")))
+	require.Equal(t, `[]`, fmt.Sprintf("%q", Lines("\n")))
 }

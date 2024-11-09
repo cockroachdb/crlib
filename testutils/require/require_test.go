@@ -12,35 +12,24 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package crencoding
+package require_test
 
 import (
-	"encoding/binary"
-	"math"
-	"math/rand/v2"
 	"testing"
 
 	"github.com/cockroachdb/crlib/testutils/require"
 )
 
-// TestUvarintLen tests UvarintLen32 and UvarintLen64.
-func TestUvarintLen(t *testing.T) {
-	check := func(n uint64) {
-		t := require.WithMsgf(t, "n=%d", n)
-		res64 := UvarintLen64(n)
-		require.Equal(t, res64, len(binary.AppendUvarint(nil, n)))
+func TestWithMsg(t *testing.T) {
+	t2 := require.WithMsg(t, "foo")
+	// foo: hello1
+	t2.Logf("hello%d", 1)
 
-		res32 := UvarintLen32(uint32(n))
-		require.Equal(t, res32, len(binary.AppendUvarint(nil, uint64(uint32(n)))))
-	}
-	check(0)
-	check(math.MaxUint64)
-	for i := uint64(0); i < 64; i++ {
-		check(1<<i - 1)
-		check(1 << i)
-		check(1<<i + 1)
-	}
-	for i := 0; i < 100000; i++ {
-		check(rand.Uint64() >> rand.UintN(64))
-	}
+	// 1.2: hello2
+	t2 = require.WithMsgf(t, "%d.%d", 1, 2)
+	t2.Log("hello2")
+
+	// 1.2: bar: hello3
+	t3 := require.WithMsgf(t2, "bar")
+	t3.Log("hello3")
 }
