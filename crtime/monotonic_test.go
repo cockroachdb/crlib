@@ -17,18 +17,17 @@ package crtime
 import (
 	"testing"
 	"time"
+
+	"github.com/cockroachdb/crlib/testutils/require"
 )
 
 func TestMono(t *testing.T) {
 	a := NowMono()
 	time.Sleep(10 * time.Millisecond)
 	b := NowMono()
-	if delta := b.Sub(a); delta < 9*time.Millisecond {
-		t.Errorf("expected 10+ms, got %s", delta)
-	}
+	require.GE(t, b.Sub(a), 9*time.Millisecond)
 	c := MonoFromTime(time.Now())
 	d := NowMono()
-	if c < b || c > d {
-		t.Errorf("expected %d <= %d <= %d", b, c, d)
-	}
+	require.LE(t, b, c)
+	require.LE(t, c, d)
 }

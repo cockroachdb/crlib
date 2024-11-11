@@ -17,34 +17,36 @@ package fifo
 import (
 	"math/rand"
 	"testing"
+
+	"github.com/cockroachdb/crlib/testutils/require"
 )
 
 var pool = MakeQueueBackingPool[int]()
 
 func TestQueue(t *testing.T) {
 	q := MakeQueue[int](&pool)
-	requireEqual(t, q.PeekFront(), nil)
-	requireEqual(t, q.Len(), 0)
+	require.Equal(t, q.PeekFront(), nil)
+	require.Equal(t, q.Len(), 0)
 	q.PushBack(1)
 	q.PushBack(2)
 	q.PushBack(3)
-	requireEqual(t, q.Len(), 3)
-	requireEqual(t, *q.PeekFront(), 1)
+	require.Equal(t, q.Len(), 3)
+	require.Equal(t, *q.PeekFront(), 1)
 	q.PopFront()
-	requireEqual(t, *q.PeekFront(), 2)
+	require.Equal(t, *q.PeekFront(), 2)
 	q.PopFront()
-	requireEqual(t, *q.PeekFront(), 3)
+	require.Equal(t, *q.PeekFront(), 3)
 	q.PopFront()
-	requireEqual(t, q.PeekFront(), nil)
+	require.Equal(t, q.PeekFront(), nil)
 
 	for i := 1; i <= 1000; i++ {
 		q.PushBack(i)
-		requireEqual(t, q.Len(), i)
+		require.Equal(t, q.Len(), i)
 	}
 	for i := 1; i <= 1000; i++ {
-		requireEqual(t, *q.PeekFront(), i)
+		require.Equal(t, *q.PeekFront(), i)
 		q.PopFront()
-		requireEqual(t, q.Len(), 1000-i)
+		require.Equal(t, q.Len(), 1000-i)
 	}
 }
 
@@ -55,20 +57,13 @@ func TestQueueRand(t *testing.T) {
 		for n := rand.Intn(100); n > 0; n-- {
 			r++
 			q.PushBack(r)
-			requireEqual(t, q.Len(), r-l)
+			require.Equal(t, q.Len(), r-l)
 		}
 		for n := rand.Intn(q.Len() + 1); n > 0; n-- {
 			l++
-			requireEqual(t, *q.PeekFront(), l)
+			require.Equal(t, *q.PeekFront(), l)
 			q.PopFront()
-			requireEqual(t, q.Len(), r-l)
+			require.Equal(t, q.Len(), r-l)
 		}
-	}
-}
-
-func requireEqual[T comparable](t *testing.T, actual, expected T) {
-	t.Helper()
-	if actual != expected {
-		t.Fatalf("expected %v, but found %v", expected, actual)
 	}
 }
