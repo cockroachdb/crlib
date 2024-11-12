@@ -105,7 +105,7 @@ type QueueBackingPool[T any] struct {
 	pool sync.Pool
 }
 
-// MakeQueueBackingPool makes a queue backing pool. It is intented to be used to
+// MakeQueueBackingPool makes a queue backing pool. It is intended to be used to
 // initialize a singleton (global) variable. A single pool can and should be
 // used by all queues of that type.
 func MakeQueueBackingPool[T any]() QueueBackingPool[T] {
