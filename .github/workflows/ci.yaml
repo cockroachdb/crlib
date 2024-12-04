@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - ghworkflow
   pull_request:
     branches:
       - main
@@ -50,7 +51,7 @@ jobs:
     strategy:
       matrix:
         go: ["1.22"]
-    runs-on: macos-12
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v2
 
