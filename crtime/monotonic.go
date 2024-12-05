@@ -44,6 +44,18 @@ func (m Mono) Elapsed() time.Duration {
 	return time.Duration(NowMono() - m)
 }
 
+// ToUTC returns the UTC time corresponding to the monotonic time.
+//
+// The time is derived from the current wall clock, adjusted by the difference
+// in the monotonic clock values. Note that if the wall clock has been changed
+// since the Mono value was obtained, the result does not reflect the wall clock
+// at that point in time.
+func (m Mono) ToUTC() time.Time {
+	now := time.Now()
+	adjustment := time.Duration(m) - now.Sub(startTime)
+	return now.UTC().Add(adjustment)
+}
+
 // MonoFromTime converts a time.Time to a Mono value. If the time has a
 // monotonic component, it is used.
 func MonoFromTime(t time.Time) Mono {

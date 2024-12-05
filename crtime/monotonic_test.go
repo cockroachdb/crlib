@@ -30,4 +30,17 @@ func TestMono(t *testing.T) {
 	d := NowMono()
 	require.LE(t, b, c)
 	require.LE(t, c, d)
+
+	t.Run("ToUTC", func(t *testing.T) {
+		const d = 50 * time.Millisecond
+		const tolerance = time.Millisecond
+
+		start := NowMono()
+		expected := time.Now().UnixNano()
+		time.Sleep(d)
+		actual := start.ToUTC().UnixNano()
+		if actual < expected-tolerance.Nanoseconds() || actual > expected+tolerance.Nanoseconds() {
+			t.Fatalf("actual - expected = %s", time.Duration(actual-expected))
+		}
+	})
 }
