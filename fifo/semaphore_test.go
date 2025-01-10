@@ -19,6 +19,7 @@ import (
 	"errors"
 	"math/rand"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -30,7 +31,6 @@ func TestSemaphoreAPI(t *testing.T) {
 	s := NewSemaphore(10)
 	require.Equal(t, s.TryAcquire(5), true)
 	require.Equal(t, s.TryAcquire(10), false)
-	require.Equal(t, s.Acquire(context.Background(), 20), ErrRequestExceedsCapacity)
 	require.Equal(t, "capacity: 10, outstanding: 5, num-had-to-wait: 0", s.Stats().String())
 
 	ch := make(chan struct{}, 10)
@@ -58,6 +58,7 @@ func TestSemaphoreAPI(t *testing.T) {
 	s.Release(8)
 	require.Recv(t, ch)
 
+	require.True(t, strings.Contains(s.Stats().String(), "capacity: 10, outstanding: 5"))
 	// Test UpdateCapacity.
 	go func() {
 		if err := s.Acquire(context.Background(), 8); err != nil {
@@ -68,15 +69,26 @@ func TestSemaphoreAPI(t *testing.T) {
 			t.Error(err)
 		}
 		ch <- struct{}{}
-		require.Equal(t, s.Acquire(context.Background(), 5), ErrRequestExceedsCapacity)
-		ch <- struct{}{}
 	}()
 	require.NoRecv(t, ch)
 	s.UpdateCapacity(15)
 	require.Recv(t, ch)
 	require.Recv(t, ch)
-	require.NoRecv(t, ch)
 	s.UpdateCapacity(2)
+	go func() {
+		// Request more than the capacity.
+		if err := s.Acquire(context.Background(), 5); err != nil {
+			t.Error(err)
+		}
+		ch <- struct{}{}
+	}()
+	require.NoRecv(t, ch)
+	s.Release(5)
+	require.NoRecv(t, ch)
+	s.Release(8)
+	require.NoRecv(t, ch)
+	s.Release(1)
+	// Last request should now be allowed, despite being larger than the capacity.
 	require.Recv(t, ch)
 }
 
