@@ -97,3 +97,23 @@ func Lines(s string) []string {
 	}
 	return strings.Split(s, "\n")
 }
+
+// Indent prepends a string to every line of the given string.
+//
+// If the string ends in a newline, the resulting string also ends in a newline.
+func Indent(prepend, str string) string {
+	lines := strings.Split(str, "\n")
+	var b strings.Builder
+	b.Grow(len(str) + len(lines)*len(prepend))
+	for i, l := range lines {
+		if i > 0 {
+			b.WriteString("\n")
+		}
+		// Make sure we don't add an extra prepend after a trailing newline.
+		if i < len(lines)-1 || l != "" {
+			b.WriteString(prepend)
+			b.WriteString(l)
+		}
+	}
+	return b.String()
+}

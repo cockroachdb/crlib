@@ -76,3 +76,18 @@ func TestLines(t *testing.T) {
 	require.Equal(t, `[]`, fmt.Sprintf("%q", Lines("")))
 	require.Equal(t, `[]`, fmt.Sprintf("%q", Lines("\n")))
 }
+
+func TestIndent(t *testing.T) {
+	testCases := [][2]string{
+		{"", ""},
+		{"foo", "--foo"},
+		{"foo\n", "--foo\n"},
+		{"foo\n\n", "--foo\n--\n"},
+		{"foo\nbar", "--foo\n--bar"},
+		{"foo\nbar\n", "--foo\n--bar\n"},
+		{"foo\n\nbar\n", "--foo\n--\n--bar\n"},
+	}
+	for _, tc := range testCases {
+		require.Equal(t, tc[1], Indent("--", tc[0]))
+	}
+}
