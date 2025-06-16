@@ -21,14 +21,19 @@ import (
 
 func Float(value float64, decimalDigits int) SafeString {
 	s := strconv.FormatFloat(value, 'f', decimalDigits, 64)
-	// Strip trailing zeros.
-	if strings.ContainsRune(s, '.') {
-		for s[len(s)-1] == '0' {
-			s = s[:len(s)-1]
-		}
-		if s[len(s)-1] == '.' {
-			s = s[:len(s)-1]
-		}
-	}
+	s = stripTrailingZeroDecimals(s)
 	return SafeString(s)
+}
+
+func stripTrailingZeroDecimals(s string) string {
+	if !strings.ContainsRune(s, '.') {
+		return s
+	}
+	for s[len(s)-1] == '0' {
+		s = s[:len(s)-1]
+	}
+	if s[len(s)-1] == '.' {
+		s = s[:len(s)-1]
+	}
+	return s
 }

@@ -1,0 +1,75 @@
+uint64
+1
+1,234
+1,234 Mi
+1k
+1Ki
+1.2 Ki
+.9 K
+0.9 Ki
+8.1t
+8.1 Ti
+16E
+----
+1: 1
+1,234: 1234
+1,234 Mi: 1293942784
+1k: 1000
+1Ki: 1024
+1.2 Ki: 1229
+.9 K: 900
+0.9 Ki: 922
+8.1t: 8100000000000
+8.1 Ti: 8906044184986
+16E: 16000000000000000000
+
+uint64
+1.0
+1.0000000000000001
+----
+1.0: 1
+1.0000000000000001: cannot parse "1.0000000000000001": number without unit prefix must be an integer
+
+uint64 unit=smoots
+1 Ki
+1kismoots
+1 KISMOOTS
+1 MiSmoots
+1 Kiother
+----
+1 Ki: 1024
+1kismoots: 1024
+1 KISMOOTS: 1024
+1 MiSmoots: 1048576
+1 Kiother: cannot parse "1 Kiother": unknown unit "Kiother"
+
+# Special case: values close to MaxUint64 are normally formatted as 16Ei which
+# would overflow. We return MaxUint64 in this case.
+uint64
+16Ei
+16384 Pi
+----
+16Ei: 18446744073709551615
+16384 Pi: 18446744073709551615
+
+uint64
+18,446,744,073,709,551,616
+123456789012345678901234567890
+16385 Pi
+16384.1 Pi
+16.1 Ei
+20 Ei
+----
+18,446,744,073,709,551,616: cannot parse value from "18,446,744,073,709,551,616": out of range
+123456789012345678901234567890: cannot parse value from "123456789012345678901234567890": out of range
+16385 Pi: cannot parse value from "16385 Pi": out of range
+16384.1 Pi: cannot parse value from "16384.1 Pi": out of range
+16.1 Ei: cannot parse value from "16.1 Ei": out of range
+20 Ei: cannot parse value from "20 Ei": out of range
+
+uint64
+-1
+-123456789012345678901234567890
+----
+-1: value cannot be negative in "-1"
+-123456789012345678901234567890: value cannot be negative in "-123456789012345678901234567890"

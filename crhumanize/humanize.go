@@ -14,11 +14,62 @@
 
 package crhumanize
 
-import (
-	"math"
-	"math/bits"
-	"strings"
-)
+// Bytes formats a byte value in IEC units.
+//
+// Unless Exact is used, the result is approximate (within ~5%).
+//
+// Examples: "1.5 MiB", "21 GiB", "3 B".
+func Bytes[T Integer](bytes T, flags ...FmtFlag) SafeString {
+	return Format(bytes, IEC, "B", flags...)
+}
+
+// ParseBytes parses a string representation of a byte value.
+//
+// Unless they have the i indicator, the units are interpreted as SI units. For
+// example, "1 KB" = 1,000 whereas "1 KiB" = 1,024.
+//
+// The space separator and the B suffix are optional.
+func ParseBytes[T Integer](s string) (T, error) {
+	return Parse[T](s, "B")
+}
+
+// BytesPerSec formats a bytes-per-second value in IEC units.
+//
+// Unless Exact is used, the result is approximate (within 5%).
+//
+// Examples: "1.5 MiB/s", "21 GiB/s", "3 B/s".
+func BytesPerSec[T Integer](bytes T, flags ...FmtFlag) SafeString {
+	return Format(bytes, IEC, "B/s", flags...)
+}
+
+// ParseBytesPerSec parses a string representation of a bytes-per-second value.
+//
+// Unless they have the i indicator, the units are interpreted as SI units. For
+// example, "1 KB/s" = 1,000 whereas "1 KiB/s" = 1,024.
+//
+// The space separator and the B/s suffix are optional.
+func ParseBytesPerSec[T Integer](s string) (T, error) {
+	return Parse[T](s, "B/s")
+}
+
+// Count formats a unitless value in SI units.
+//
+// Unless Exact is used, the result is approximate (within 5%).
+//
+// Examples: "123", "1.2 K", "12 M".
+func Count[T Integer](count T, flags ...FmtFlag) SafeString {
+	return Format(count, SI, "", flags...)
+}
+
+// ParseCount parses a string representation of a unitless value.
+//
+// Unless they have the i indicator, the units are interpreted as SI units. For
+// example, "1 K" = 1,000 whereas "1 Ki" = 1,024.
+//
+// The space separator is optional.
+func ParseCount[T Integer](s string) (T, error) {
+	return Parse[T](s, "")
+}
 
 // Integer is a constraint that permits any integer type.
 type Integer interface {
@@ -36,34 +87,3 @@ func (fs SafeString) SafeValue() {}
 
 // String implements fmt.Stringer.
 func (fs SafeString) String() string { return string(fs) }
-
-var iecUnits = []string{"", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei"}
-var siUnits = []string{"", "K", "M", "G", "T", "P", "E"}
-
-func iecUnit(value uint64) (index int, scaled float64) {
-	n := (max(0, bits.Len64(value)-1)) / 10
-	return n, float64(value) / float64(uint64(1)<<(10*n))
-}
-
-func siUnit(value uint64) (index int, scaled float64) {
-	if value < 10 {
-		return 0, float64(value)
-	}
-	n := int(math.Floor(math.Log10(float64(value)))) / 3
-	return n, float64(value) / math.Pow10(3*n)
-}
-
-func parseUnit(s string) (index int, iec bool, ok bool) {
-	s = strings.ToUpper(s)
-	s, iec = strings.CutSuffix(s, "I")
-	for i := range siUnits {
-		if s == siUnits[i] {
-			if i == 0 && iec {
-				// Just an "i" is not ok.
-				return 0, false, false
-			}
-			return i, iec, true
-		}
-	}
-	return 0, false, false
-}

@@ -16,15 +16,32 @@ package crhumanize
 
 import "fmt"
 
-func Count[T Integer](count T) SafeString {
-	if count < 0 {
-		return "-" + Count[T](-count)
-	}
+func ExampleBytes() {
+	fmt.Println(Bytes(120_000))
+	fmt.Println(Bytes(1024*10000, Exact))
+	fmt.Println(Bytes(950_000, Compact, OmitI))
+	// Output:
+	// 117 KiB
+	// 10,000 KiB
+	// 928KB
+}
 
-	n, scaled := siUnit(uint64(count))
-	digits := 0
-	if scaled < 10 {
-		digits = 1
-	}
-	return SafeString(fmt.Sprintf("%s%s", Float(scaled, digits), siUnits[n]))
+func ExampleBytesPerSec() {
+	fmt.Println(BytesPerSec(120_000))
+	fmt.Println(BytesPerSec(1024*10000, Exact))
+	fmt.Println(BytesPerSec(950_000, Compact, OmitI))
+	// Output:
+	// 117 KiB/s
+	// 10,000 KiB/s
+	// 928KB/s
+}
+
+func ExampleCount() {
+	fmt.Println(Count(120_000))
+	fmt.Println(Count(1024*10000, Exact))
+	fmt.Println(Count(950_000, Compact, OmitI))
+	// Output:
+	// 120 K
+	// 10,240 K
+	// 950K
 }
