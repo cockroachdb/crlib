@@ -1,0 +1,863 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
+package datadriven
+
+import (
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"regexp"
+	"runtime"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+)
+
+var (
+	rewriteTestFiles = flag.Bool(
+		"rewrite", false,
+		"ignore the expected results and rewrite the test files with the actual results from this "+
+			"run. Used to update tests when a change affects many cases; please verify the testfile "+
+			"diffs carefully!",
+	)
+
+	quietLog = flag.Bool(
+		"datadriven-quiet", false,
+		"avoid echoing the directives and responses from test files.",
+	)
+)
+
+// Verbose returns true iff -datadriven-quiet was not passed.
+func Verbose() bool {
+	return testing.Verbose() && !*quietLog
+}
+
+// In CockroachDB we want to quiesce all the logs across all packages.
+// If we had only a flag to work with, we'd get command line parsing
+// errors on all packages that do not use datadriven. So
+// we make do by also making a command line parameter available.
+func init() {
+	const quietEnvVar = "DATADRIVEN_QUIET_LOG"
+	if str, ok := os.LookupEnv(quietEnvVar); ok {
+		v, err := strconv.ParseBool(str)
+		if err != nil {
+			panic(fmt.Sprintf("error parsing %s: %s", quietEnvVar, err))
+		}
+		*quietLog = v
+	}
+}
+
+// RunTest invokes a data-driven test. The test cases are contained in a
+// separate test file and are dynamically loaded, parsed, and executed by this
+// testing framework. By convention, test files are typically located in a
+// sub-directory called "testdata". Each test file has the following format:
+//
+//	<command>[,<command>...] [arg | arg=val | arg=(val1, val2, ...)]...
+//	<input to the command>
+//	----
+//	<expected results>
+//
+// The command input can contain blank lines. However, by default, the expected
+// results cannot contain blank lines. This alternate syntax allows the use of
+// blank lines:
+//
+//	<command>[,<command>...] [arg | arg=val | arg=(val1, val2, ...)]...
+//	<input to the command>
+//	----
+//	----
+//	<expected results>
+//
+//	<more expected results>
+//	----
+//	----
+//
+// To execute data-driven tests, pass the path of the test file as well as a
+// function which can interpret and execute whatever commands are present in
+// the test file. The framework invokes the function, passing it information
+// about the test case in a TestData struct.
+//
+// The function must returns the actual results of the case, which
+// RunTest() compares with the expected results. If the two are not
+// equal, the test is marked to fail.
+//
+// Note that RunTest() creates a sub-instance of testing.T for each
+// directive in the input file. It is thus unsafe/invalid to call
+// e.g. Fatal() or Skip() on the parent testing.T from inside the
+// callback function. Use the provided testing.T instance instead.
+//
+// It is possible for a test to test for an "expected error" as follows:
+//   - run the code to test
+//   - if an error occurs, report the detail of the error as actual
+//     output.
+//   - place the expected error details in the expected results
+//     in the input file.
+//
+// It is also possible for a test to report an _unexpected_ test
+// error by calling t.Error().
+func RunTest(t *testing.T, path string, f func(t *testing.T, td *TestData) string) {
+	t.Helper()
+
+	RunTestAny(t, path, func(t testing.TB, td *TestData) string {
+		return f(t.(*testing.T), td)
+	})
+}
+
+// RunTestAny is like RunTest but works over a testing.TB.
+func RunTestAny(t testing.TB, path string, f func(t testing.TB, td *TestData) string) {
+	t.Helper()
+
+	mode := os.O_RDONLY
+	if *rewriteTestFiles {
+		// We only open read-write if rewriting, so as to enable running
+		// tests on read-only copies of the source tree.
+		mode = os.O_RDWR
+	}
+	file, err := os.OpenFile(path, mode, 0644 /* irrelevant */)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_ = file.Close()
+	}()
+	finfo, err := file.Stat()
+	if err != nil {
+		t.Fatal(err)
+	} else if finfo.IsDir() {
+		t.Fatalf("%s is a directory, not a file; consider using datadriven.Walk", path)
+	}
+
+	rewriteData := runTestInternal(t, path, file, f, *rewriteTestFiles)
+	if *rewriteTestFiles {
+		if _, err := file.WriteAt(rewriteData, 0); err != nil {
+			t.Fatal(err)
+		}
+		if err := file.Truncate(int64(len(rewriteData))); err != nil {
+			t.Fatal(err)
+		}
+		if err := file.Sync(); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// RunTestFromString is a version of RunTest which takes the contents of a test
+// directly.
+func RunTestFromString(t *testing.T, input string, f func(t *testing.T, td *TestData) string) {
+	t.Helper()
+	RunTestFromStringAny(t, input, func(t testing.TB, td *TestData) string {
+		return f(t.(*testing.T), td)
+	})
+}
+
+// RunTestFromStringAny is like RunTestFromString but works with a testing.TB.
+func RunTestFromStringAny(t testing.TB, input string, f func(t testing.TB, td *TestData) string) {
+	t.Helper()
+	runTestInternal(t, "<string>" /* sourceName */, strings.NewReader(input), f, *rewriteTestFiles)
+}
+
+func runTestInternal(
+	t testing.TB,
+	sourceName string,
+	reader io.Reader,
+	f func(t testing.TB, td *TestData) string,
+	rewrite bool,
+) (rewriteOutput []byte) {
+	t.Helper()
+
+	r := newTestDataReader(t, sourceName, reader, rewrite)
+	for r.Next(t) {
+		runDirectiveOrSubTest(t, r, "" /*mandatorySubTestPrefix*/, f)
+	}
+
+	if r.rewrite != nil {
+		data := r.rewrite.Bytes()
+		// Remove any trailing blank line.
+		if l := len(data); l > 2 && data[l-1] == '\n' && data[l-2] == '\n' {
+			data = data[:l-1]
+		}
+		return data
+	}
+	return nil
+}
+
+// runDirectiveOrSubTest runs either a "subtest" directive or an
+// actual test directive. The "mandatorySubTestPrefix" argument indicates
+// a mandatory prefix required from all sub-test names at this point.
+func runDirectiveOrSubTest(
+	t testing.TB,
+	r *testDataReader,
+	mandatorySubTestPrefix string,
+	f func(testing.TB, *TestData) string,
+) {
+	t.Helper()
+	if subTestName, ok := isSubTestStart(t, r, mandatorySubTestPrefix); ok {
+		runSubTest(subTestName, t, r, f)
+	} else {
+		runDirective(t, r, f)
+	}
+	if t.Failed() {
+		// If a test has failed with .Error(), we can't expect any
+		// subsequent test to be even able to start. Stop processing the
+		// file in that case.
+		t.FailNow()
+	}
+}
+
+// runSubTest runs a subtest up to and including the final `subtest
+// end`. The opening `subtest` directive has been consumed already.
+// The first parameter `subTestName` is the full path to the subtest,
+// including the parent subtest names as prefix. This is used to
+// validate the nesting and thus prevent mistakes.
+func runSubTest(
+	subTestName string, t testing.TB, r *testDataReader, f func(testing.TB, *TestData) string,
+) {
+	// Remember the current reader position in case we need to spell out
+	// an error message below.
+	subTestStartPos := r.data.Pos
+	// seenSubTestEnd is used below to verify that a "subtest end" directive
+	// has been detected (as opposed to EOF).
+	seenSubTestEnd := false
+	// seenSkip is used below to verify that "Skip" has not been used
+	// inside a subtest. See below for details.
+	seenSkip := false
+
+	// The name passed to t.Run is the last component in the subtest
+	// name, because all components before that are already prefixed by
+	// t.Run from the names of the parent sub-tests.
+	testingSubTestName := subTestName[strings.LastIndex(subTestName, "/")+1:]
+
+	// Begin the sub-test.
+	subTest(t, testingSubTestName, func(t testing.TB) {
+		defer func() {
+			// Skips are signalled using Goexit() so we must catch it /
+			// remember it here.
+			if t.Skipped() {
+				seenSkip = true
+			}
+		}()
+
+		for r.Next(t) {
+			if isSubTestEnd(t, r) {
+				seenSubTestEnd = true
+				return
+			}
+			runDirectiveOrSubTest(t, r, subTestName+"/" /*mandatorySubTestPrefix*/, f)
+		}
+	})
+
+	if seenSkip {
+		// t.Skip() is not yet supported inside a subtest. To add
+		// this functionality the following extra complexity is needed:
+		// - the test reader must continue to read after the skip
+		//   until the end of the subtest, and ignore all the directives in-between.
+		// - the rewrite logic must be careful to keep the input as-is
+		//   for the skipped sub-test, while proceeding to rewrite for
+		//   non-skipped tests.
+		r.data.Fatalf(t,
+			"cannot use t.Skip inside subtest\n%s: subtest started here", subTestStartPos)
+	}
+
+	if seenSubTestEnd && len(r.data.CmdArgs) == 2 && r.data.CmdArgs[1].Key != subTestName {
+		// If a subtest name was provided after "subtest end", ensure that it matches.
+		r.data.Fatalf(t,
+			"mismatched subtest end directive: expected %q, got %q", r.data.CmdArgs[1].Key, subTestName)
+	}
+
+	if !seenSubTestEnd && !t.Failed() {
+		// We only report missing "subtest end" if there was no error otherwise;
+		// for if there was an error, the reading would have stopped.
+		r.data.Fatalf(t,
+			"EOF encountered without subtest end directive\n%s: subtest started here", subTestStartPos)
+	}
+
+}
+
+func isSubTestStart(t testing.TB, r *testDataReader, mandatorySubTestPrefix string) (string, bool) {
+	if r.data.Cmd != "subtest" {
+		return "", false
+	}
+	if len(r.data.CmdArgs) != 1 {
+		r.data.Fatalf(t, "invalid syntax for subtest")
+	}
+	subTestName := r.data.CmdArgs[0].Key
+	if subTestName == "end" {
+		r.data.Fatalf(t, "subtest end without corresponding start")
+	}
+	if !strings.HasPrefix(subTestName, mandatorySubTestPrefix) {
+		r.data.Fatalf(t, "name of nested subtest must begin with %q", mandatorySubTestPrefix)
+	}
+	return subTestName, true
+}
+
+func isSubTestEnd(t testing.TB, r *testDataReader) bool {
+	if r.data.Cmd != "subtest" {
+		return false
+	}
+	if len(r.data.CmdArgs) == 0 || r.data.CmdArgs[0].Key != "end" {
+		return false
+	}
+	if len(r.data.CmdArgs) > 2 {
+		r.data.Fatalf(t, "invalid syntax for subtest end")
+	}
+	return true
+}
+
+// runDirective runs just one directive in the input.
+//
+// The stopNow and subTestSkipped booleans are modified by-reference
+// instead of returned because the testing module implements t.Skip
+// and t.Fatal using panics, and we're not guaranteed to get back to
+// the caller via a return in those cases.
+func runDirective(t testing.TB, r *testDataReader, f func(testing.TB, *TestData) string) {
+	t.Helper()
+
+	d := &r.data
+	actual := func() string {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Logf("\npanic during %s:\n%s\n", d.Pos, d.Input)
+				panic(r)
+			}
+		}()
+		actual := f(t, d)
+		if actual != "" && !strings.HasSuffix(actual, "\n") {
+			actual += "\n"
+		}
+		return actual
+	}()
+
+	if t.Failed() {
+		// If the test has failed with .Error(), then we can't hope it
+		// will have produced a useful actual output. Trying to do
+		// something with it here would risk corrupting the expected
+		// output.
+		//
+		// Moreover, we can't expect any subsequent test to be even
+		// able to start. Stop processing the file in that case.
+		t.FailNow()
+	}
+
+	// The test has not failed, we can analyze the expected
+	// output.
+	if r.rewrite != nil {
+		r.emit("----")
+		if hasBlankLine(actual) {
+			r.emit("----")
+			r.rewrite.WriteString(actual)
+			r.emit("----")
+			r.emit("----")
+			r.emit("")
+		} else {
+			// Here actual already ends in \n so emit adds a blank line.
+			r.emit(actual)
+		}
+	} else if d.Expected != actual {
+		t.Fatalf("\n%s:\n%s\nexpected:\n%s\nfound:\n%s", d.Pos, indentLines(d.String()), indentLines(d.Expected), indentLines(actual))
+	} else if Verbose() {
+		t.Logf("\n%s:\n%s  ----\n%s", d.Pos, indentLines(d.String()), indentLines(actual))
+	}
+}
+
+// Walk goes through all the files in a subdirectory, creating subtests to match
+// the file hierarchy; for each "leaf" file, the given function is called.
+//
+// This can be used in conjunction with RunTest. For example:
+//
+//	 datadriven.Walk(t, path, func (t *testing.T, path string) {
+//	   // initialize per-test state
+//	   datadriven.RunTest(t, path, func (t *testing.T, d *datadriven.TestData) string {
+//	    // ...
+//	   }
+//	 }
+//
+//	Files:
+//	  testdata/typing
+//	  testdata/logprops/scan
+//	  testdata/logprops/select
+//
+// If path is "testdata/typing", the function is called once and no subtests
+// are created.
+//
+// If path is "testdata/logprops", the function is called two times, in
+// separate subtests /scan, /select.
+//
+// If path is "testdata", the function is called three times, in subtest
+// hierarchy /typing, /logprops/scan, /logprops/select.
+func Walk(t *testing.T, path string, f func(t *testing.T, path string)) {
+	t.Helper()
+	WalkAny(t, path, func(t testing.TB, path string) {
+		f(t.(*testing.T), path)
+	})
+}
+
+// WalkAny is like Walk but works over a testing.TB.
+func WalkAny(t testing.TB, path string, f func(t testing.TB, path string)) {
+	finfo, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !finfo.IsDir() {
+		f(t, path)
+		return
+	}
+	files, err := os.ReadDir(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range files {
+		if tempFileRe.MatchString(file.Name()) {
+			// Temp or hidden file, don't even try processing.
+			continue
+		}
+		subTest(t, cutExt(file.Name()), func(t testing.TB) {
+			WalkAny(t, filepath.Join(path, file.Name()), f)
+		})
+	}
+}
+
+// cutExt returns the given file name with the extension removed, if there is
+// one.
+func cutExt(fileName string) string {
+	extStart := len(fileName) - len(filepath.Ext(fileName))
+	return fileName[:extStart]
+}
+
+func ClearResults(path string) error {
+	file, err := os.OpenFile(path, os.O_RDWR, 0644 /* irrelevant */)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = file.Close()
+	}()
+	finfo, err := file.Stat()
+	if err != nil {
+		return err
+	}
+
+	if finfo.IsDir() {
+		return fmt.Errorf("%s is a directory, not a file", path)
+	}
+
+	runTestInternal(
+		&testing.T{}, path, file,
+		func(testing.TB, *TestData) string { return "" },
+		true, /* rewrite */
+	)
+
+	return nil
+}
+
+// Ignore files named .XXXX, XXX~ or #XXX#.
+var tempFileRe = regexp.MustCompile(`(^\..*)|(.*~$)|(^#.*#$)`)
+
+// TestData contains information about one data-driven test case that was
+// parsed from the test file.
+type TestData struct {
+	// Pos is a file:line prefix for the input test file, suitable for
+	// inclusion in logs and error messages.
+	Pos string
+
+	// Cmd is the first string on the directive line (up to the first whitespace).
+	Cmd string
+
+	// CmdArgs contains the k/v arguments to the command.
+	CmdArgs []CmdArg
+
+	// Input is the text between the first directive line and the ---- separator.
+	Input string
+
+	// Expected is the value below the ---- separator. In most cases,
+	// tests need not check this, and instead return their own actual
+	// output.
+	// This field is provided so that a test can perform an early return
+	// with "return d.Expected" to signal that nothing has changed.
+	Expected string
+
+	// Rewrite is set if the test is being run with the -rewrite flag.
+	Rewrite bool
+}
+
+// FullCmd renders the command and the arguments.
+func (td *TestData) FullCmd() string {
+	fields := make([]string, 0, len(td.CmdArgs)+1)
+	fields = append(fields, td.Cmd)
+	for i := range td.CmdArgs {
+		fields = append(fields, td.CmdArgs[i].String())
+	}
+	return strings.Join(fields, " ")
+}
+
+// String renders the entire testcase. The string ends in a newline.
+func (td *TestData) String() string {
+	if td.Input == "" {
+		return td.FullCmd() + "\n"
+	}
+	return fmt.Sprintf("%s\n%s\n", td.FullCmd(), td.Input)
+}
+
+// HasArg checks whether the CmdArgs array contains an entry for the given key.
+func (td *TestData) HasArg(key string) bool {
+	_, ok := td.Arg(key)
+	return ok
+}
+
+// Arg retrieves the first CmdArg matching the given key. The second return
+// value indicates whether such an argument exists.
+func (td *TestData) Arg(key string) (arg CmdArg, ok bool) {
+	for i := range td.CmdArgs {
+		if td.CmdArgs[i].Key == key {
+			return td.CmdArgs[i], true
+		}
+	}
+	return arg, false
+}
+
+// MaybeScanArgs behaves identically to ScanArgs, except that if the arg does
+// not exist it leaves the destinations unmodified and returns false. In all
+// other cases it returns true.
+func (td *TestData) MaybeScanArgs(t testing.TB, key string, dests ...interface{}) bool {
+	t.Helper()
+	if arg, ok := td.Arg(key); ok {
+		arg.scan(t, td.Pos, dests...)
+		return true
+	}
+	return false
+}
+
+// ScanArgs looks up the first CmdArg matching the given key and scans it into
+// the given destinations in order. If the arg does not exist, the number of
+// destinations does not match that of the arguments, or a destination can not
+// be populated from its matching value, a fatal error results. If the arg
+// exists multiple times, the first occurrence is parsed. For example, for a
+// TestData originating from
+//
+//	cmd arg1=50 arg2=yoruba arg3=(50, 50, 50)
+//
+// the following would be valid:
+//
+//	var i1, i2, i3, i4 int
+//	var s string
+//	td.ScanArgs(t, "arg1", &i1)
+//	td.ScanArgs(t, "arg2", &s)
+//	td.ScanArgs(t, "arg3", &i2, &i3, &i4)
+func (td *TestData) ScanArgs(t testing.TB, key string, dests ...interface{}) {
+	t.Helper()
+	arg, ok := td.Arg(key)
+	if !ok {
+		td.Fatalf(t, "missing argument: %s", key)
+	}
+	arg.scan(t, td.Pos, dests...)
+}
+
+// Retry is used for tests that depend on background goroutines to finish work.
+// It takes a function that produces the output of the testcase and calls it
+// repeatedly until it matches the expected output (for at most 1 second).
+//
+// Returns the last value returned by f (which can be directly returned from the
+// function passed to RunTest).
+//
+// If --rewrite is used, just sleeps for 100ms.
+func (td *TestData) Retry(tb testing.TB, f func() string) string {
+	return td.RetryFor(tb, time.Second, f)
+}
+
+// RetryFor is like Retry but with a custom timeout.
+func (td *TestData) RetryFor(tb testing.TB, d time.Duration, f func() string) string {
+	if td.Rewrite {
+		// For rewrite mode, we have nothing to compare the output to. Just sleep a
+		// reasonable amount, under the assumption that --rewrite won't be used
+		// under stress or a loaded system.
+		time.Sleep(d / 10)
+		return f()
+	}
+	runtime.Gosched()
+	// We are going to evaluate f until it produces the correct answer numStable
+	// times in a row.
+	const numAttempts = 100
+	const numStable = 3
+	// numOk is the number of consecutive calls of f() that have returned the
+	// correct answer.
+	numOk := 0
+	expected := strings.TrimSpace(td.Expected)
+	for i := 0; ; i++ {
+		s := f()
+		if strings.TrimSpace(s) == expected {
+			numOk++
+		} else {
+			numOk = 0
+		}
+		if numOk == numStable || i == numAttempts {
+			if i >= numStable {
+				td.Logf(tb, "retried for %s (%d times)", time.Duration(i-numStable+1)*d/numAttempts, i-numStable+1)
+			}
+			return s
+		}
+		time.Sleep(d/numAttempts + 1)
+	}
+}
+
+// CmdArg contains information about an argument on the directive line. An
+// argument is specified in one of the following forms:
+//   - argument
+//   - argument=value
+//   - argument=(values, ...)
+type CmdArg struct {
+	Key  string
+	Vals []string
+}
+
+func (arg CmdArg) String() string {
+	switch len(arg.Vals) {
+	case 0:
+		return arg.Key
+
+	case 1:
+		return fmt.Sprintf("%s=%s", arg.Key, arg.Vals[0])
+
+	default:
+		return fmt.Sprintf("%s=(%s)", arg.Key, strings.Join(arg.Vals, ", "))
+	}
+}
+
+// FirstVal asserts that arg has at least one value and returns the first one.
+func (arg CmdArg) FirstVal(t testing.TB) string {
+	t.Helper()
+	arg.ExpectNumValsGE(t, 1)
+	return arg.Vals[0]
+}
+
+// SingleVal asserts that arg has exactly one value and returns it.
+func (arg CmdArg) SingleVal(t testing.TB) string {
+	t.Helper()
+	arg.ExpectNumVals(t, 1)
+	return arg.Vals[0]
+}
+
+// TwoVals asserts that arg has exactly two values and returns them.
+func (arg CmdArg) TwoVals(t testing.TB) (string, string) {
+	t.Helper()
+	arg.ExpectNumVals(t, 2)
+	return arg.Vals[0], arg.Vals[1]
+}
+
+// ExpectNumVals asserts that arg has exactly num values.
+func (arg CmdArg) ExpectNumVals(t testing.TB, num int) {
+	t.Helper()
+	if len(arg.Vals) != num {
+		t.Fatalf("argument %q requires %d values, has %d", arg.Key, num, len(arg.Vals))
+	}
+}
+
+// ExpectNumValsGE asserts that arg has at least minNum values.
+func (arg CmdArg) ExpectNumValsGE(t testing.TB, minNum int) {
+	t.Helper()
+	if len(arg.Vals) < minNum {
+		t.Fatalf("argument %q requires at least %d values, has %d", arg.Key, minNum, len(arg.Vals))
+	}
+}
+
+// Scan attempts to parse the value at index i into the dest.
+func (arg CmdArg) Scan(t testing.TB, i int, dest interface{}) {
+	t.Helper()
+	if err := arg.scanScalarErr(i, dest); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func (arg CmdArg) scan(t testing.TB, pos string, dests ...interface{}) {
+	// If only one destination is provided, use scanAllErr which supports
+	// scanning multiple values into a slice destination type.
+	if len(dests) == 1 {
+		if err := arg.scanAllErr(dests[0]); err != nil {
+			t.Fatalf("%s: %s: failed to scan argument %d: %v", pos, arg.Key, 0, err)
+		}
+		return
+	}
+
+	// Multiple destinations provided; update each corresponding destination to
+	// support invocations of the form:
+	//
+	//   td.ScanArgs(t, "arg3", &i2, &i3, &i4)
+	//
+	if len(dests) != len(arg.Vals) {
+		t.Fatalf("%s: %s: got %d destinations, but %d values", pos, arg.Key, len(dests), len(arg.Vals))
+	}
+
+	for i := range dests {
+		if err := arg.scanScalarErr(i, dests[i]); err != nil {
+			t.Fatalf("%s: %s: failed to scan argument %d: %v", pos, arg.Key, i, err)
+		}
+	}
+}
+
+func (arg CmdArg) scanAllErr(dest interface{}) error {
+	// Try supported slice destination types.
+	switch dest := dest.(type) {
+	case *[]string:
+		// Make a copy to avoid unexpected mutation of CmdArg.Vals.
+		*dest = append([]string(nil), arg.Vals...)
+		return nil
+	case *[]int:
+		*dest = make([]int, len(arg.Vals))
+		for i := 0; i < len(arg.Vals); i++ {
+			n, err := strconv.ParseInt(arg.Vals[i], 10, 64)
+			if err != nil {
+				return fmt.Errorf("arg %d: %w", i, err)
+			}
+			(*dest)[i] = int(n)
+		}
+		return nil
+	case *[]uint64:
+		*dest = make([]uint64, len(arg.Vals))
+		for i := 0; i < len(arg.Vals); i++ {
+			n, err := strconv.ParseUint(arg.Vals[i], 10, 64)
+			if err != nil {
+				return fmt.Errorf("arg %d: %w", i, err)
+			}
+			(*dest)[i] = uint64(n)
+		}
+		return nil
+	case *[]float64:
+		*dest = make([]float64, len(arg.Vals))
+		for i := 0; i < len(arg.Vals); i++ {
+			n, err := strconv.ParseFloat(arg.Vals[i], 64)
+			if err != nil {
+				return fmt.Errorf("arg %d: %w", i, err)
+			}
+			(*dest)[i] = float64(n)
+		}
+		return nil
+	}
+
+	// If there's a single value and `dest` is a supported scalar type, we might
+	// still be able to scan it.
+	if len(arg.Vals) == 1 {
+		return arg.scanScalarErr(0, dest)
+	}
+	return fmt.Errorf("unsupported type %T for %q (might be easy to add it)", dest, arg.Key)
+}
+
+// scanScalarErr is like Scan but returns an error rather than taking a testing.T to fatal.
+func (arg CmdArg) scanScalarErr(i int, dest interface{}) error {
+	if i < 0 || i >= len(arg.Vals) {
+		return fmt.Errorf("cannot scan index %d of key %s", i, arg.Key)
+	}
+	val := arg.Vals[i]
+	switch dest := dest.(type) {
+	case *string:
+		*dest = val
+	case *int:
+		n, err := strconv.ParseInt(val, 10, 64)
+		if err != nil {
+			return err
+		}
+		*dest = int(n) // assume 64bit ints
+	case *int64:
+		n, err := strconv.ParseInt(val, 10, 64)
+		if err != nil {
+			return err
+		}
+		*dest = n
+	case *uint64:
+		n, err := strconv.ParseUint(val, 10, 64)
+		if err != nil {
+			return err
+		}
+		*dest = n
+	case *uint32:
+		n, err := strconv.ParseUint(val, 10, 32)
+		if err != nil {
+			return err
+		}
+		*dest = uint32(n)
+	case *bool:
+		b, err := strconv.ParseBool(val)
+		if err != nil {
+			return err
+		}
+		*dest = b
+	case *float64:
+		t, err := strconv.ParseFloat(val, 64)
+		if err != nil {
+			return err
+		}
+		*dest = t
+	case *time.Duration:
+		t, err := time.ParseDuration(val)
+		if err != nil {
+			return err
+		}
+		*dest = t
+	default:
+		return fmt.Errorf("unsupported type %T for destination #%d (might be easy to add it)", dest, i+1)
+	}
+	return nil
+}
+
+// Logf is a wrapper for tb.Logf which adds file position information, so
+// that it's easy to locate the source of the log.
+func (td TestData) Logf(tb testing.TB, format string, args ...interface{}) {
+	tb.Helper()
+	tb.Logf("%s: %s", td.Pos, fmt.Sprintf(format, args...))
+}
+
+// Fatalf wraps a fatal testing error with test file position information, so
+// that it's easy to locate the source of the error.
+func (td TestData) Fatalf(tb testing.TB, format string, args ...interface{}) {
+	tb.Helper()
+	tb.Fatalf("%s: %s", td.Pos, fmt.Sprintf(format, args...))
+}
+
+// hasBlankLine returns true iff `s` contains at least one line that's
+// empty or contains only whitespace.
+func hasBlankLine(s string) bool {
+	return blankLineRe.MatchString(s)
+}
+
+// blankLineRe matches lines that contain only whitespaces (or
+// entirely empty/blank lines).  We use the "m" flag for "multiline"
+// mode so that "^" can match the beginning of individual lines inside
+// the input, not just the beginning of the input.  In multiline mode,
+// "$" also matches the end of lines. However, note how the regexp
+// uses "\n" to match the end of lines instead of "$". This is
+// because of an oddity in the Go regexp engine: at the very end of
+// the input, *after the final \n in the input*, Go estimates there is
+// still one more line containing no characters but that matches the
+// "^.*$" regexp. The result of this oddity is that an input text like
+// "foo\n" will match as "foo\n" (no match) + "" (yes match). We don't
+// want that final match to be included, so we force the end-of-line
+// match using "\n" specifically.
+var blankLineRe = regexp.MustCompile(`(?m)^[\t ]*\n`)
+
+func indentLines(str string) string {
+	var b strings.Builder
+	if str == "" {
+		return ""
+	}
+	for i, l := range strings.Split(str, "\n") {
+		if i > 0 {
+			b.WriteString("\n")
+		}
+		if l != "" {
+			b.WriteString("  ")
+			b.WriteString(l)
+		}
+	}
+	return b.String()
+}
