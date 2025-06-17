@@ -1,4 +1,4 @@
-// Copyright 2025 The Cockroach Authors.
+// Copyright 2018 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,19 +12,29 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package crhumanize
+package datadriven
 
-import "fmt"
+import (
+	"bufio"
+	"io"
+)
 
-func Count[T Integer](count T) SafeString {
-	if count < 0 {
-		return "-" + Count[T](-count)
+type lineScanner struct {
+	*bufio.Scanner
+	line int
+}
+
+func newLineScanner(r io.Reader) *lineScanner {
+	return &lineScanner{
+		Scanner: bufio.NewScanner(r),
+		line:    0,
 	}
+}
 
-	n, scaled := siUnit(uint64(count))
-	digits := 0
-	if scaled < 10 {
-		digits = 1
+func (l *lineScanner) Scan() bool {
+	ok := l.Scanner.Scan()
+	if ok {
+		l.line++
 	}
-	return SafeString(fmt.Sprintf("%s%s", Float(scaled, digits), siUnits[n]))
+	return ok
 }

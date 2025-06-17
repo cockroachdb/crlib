@@ -1,4 +1,4 @@
-// Copyright 2025 The Cockroach Authors.
+// Copyright 2018 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,28 +12,6 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package crhumanize
-
-import (
-	"strconv"
-	"strings"
-)
-
-func Float(value float64, decimalDigits int) SafeString {
-	s := strconv.FormatFloat(value, 'f', decimalDigits, 64)
-	s = stripTrailingZeroDecimals(s)
-	return SafeString(s)
-}
-
-func stripTrailingZeroDecimals(s string) string {
-	if !strings.ContainsRune(s, '.') {
-		return s
-	}
-	for s[len(s)-1] == '0' {
-		s = s[:len(s)-1]
-	}
-	if s[len(s)-1] == '.' {
-		s = s[:len(s)-1]
-	}
-	return s
-}
+// Package datadriven is a (slightly stripped-down) copy of
+// github.com/cockroachdb/datadriven.
+package datadriven

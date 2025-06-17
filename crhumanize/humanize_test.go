@@ -14,26 +14,34 @@
 
 package crhumanize
 
-import (
-	"strconv"
-	"strings"
-)
+import "fmt"
 
-func Float(value float64, decimalDigits int) SafeString {
-	s := strconv.FormatFloat(value, 'f', decimalDigits, 64)
-	s = stripTrailingZeroDecimals(s)
-	return SafeString(s)
+func ExampleBytes() {
+	fmt.Println(Bytes(120_000))
+	fmt.Println(Bytes(1024*10000, Exact))
+	fmt.Println(Bytes(950_000, Compact, OmitI))
+	// Output:
+	// 117 KiB
+	// 10,000 KiB
+	// 928KB
 }
 
-func stripTrailingZeroDecimals(s string) string {
-	if !strings.ContainsRune(s, '.') {
-		return s
-	}
-	for s[len(s)-1] == '0' {
-		s = s[:len(s)-1]
-	}
-	if s[len(s)-1] == '.' {
-		s = s[:len(s)-1]
-	}
-	return s
+func ExampleBytesPerSec() {
+	fmt.Println(BytesPerSec(120_000))
+	fmt.Println(BytesPerSec(1024*10000, Exact))
+	fmt.Println(BytesPerSec(950_000, Compact, OmitI))
+	// Output:
+	// 117 KiB/s
+	// 10,000 KiB/s
+	// 928KB/s
+}
+
+func ExampleCount() {
+	fmt.Println(Count(120_000))
+	fmt.Println(Count(1024*10000, Exact))
+	fmt.Println(Count(950_000, Compact, OmitI))
+	// Output:
+	// 120 K
+	// 10,240 K
+	// 950K
 }

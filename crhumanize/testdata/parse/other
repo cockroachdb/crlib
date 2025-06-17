@@ -1,0 +1,93 @@
+int8
+-1
+-128
+127
+-0.125 Ki
+0.125 Ki
+-129
+128
+----
+-1: -1
+-128: -128
+127: 127
+-0.125 Ki: -128
+0.125 Ki: 127
+-129: cannot parse value from "-129": out of range
+128: cannot parse value from "128": out of range
+
+uint8
+-1
+128
+255
+256
+.25Ki
+----
+-1: value cannot be negative in "-1"
+128: 128
+255: 255
+256: cannot parse value from "256": out of range
+.25Ki: 255
+
+int16
+-32768
+-32K
+32K
+32.00001K
+-32769
+32768
+----
+-32768: -32768
+-32K: -32000
+32K: 32000
+32.00001K: 32000
+-32769: cannot parse value from "-32769": out of range
+32768: cannot parse value from "32768": out of range
+
+uint16
+-1
+65K
+64Ki
+0.0625 Mi
+65,535
+65,536
+----
+-1: value cannot be negative in "-1"
+65K: 65000
+64Ki: 65535
+0.0625 Mi: 65535
+65,535: 65535
+65,536: cannot parse value from "65,536": out of range
+
+int32
+-2,147,483,648
+-2Gi
+2,147,483,647
+2Gi
+2048Ki
+2,147,483,648
+2.00001Gi
+----
+-2,147,483,648: -2147483648
+-2Gi: -2147483648
+2,147,483,647: 2147483647
+2Gi: 2147483647
+2048Ki: 2097152
+2,147,483,648: cannot parse value from "2,147,483,648": out of range
+2.00001Gi: cannot parse value from "2.00001Gi": out of range
+
+uint32
+-2Gi
+4.2G
+4Gi
+4,294,967,295
+4096Ki
+4,294,967,296
+4.00001Gi
+----
+-2Gi: value cannot be negative in "-2Gi"
+4.2G: 4200000000
+4Gi: 4294967295
+4,294,967,295: 4294967295
+4096Ki: 4194304
+4,294,967,296: cannot parse value from "4,294,967,296": out of range
+4.00001Gi: cannot parse value from "4.00001Gi": out of range

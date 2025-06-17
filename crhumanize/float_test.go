@@ -14,7 +14,10 @@
 
 package crhumanize
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func TestFloat(t *testing.T) {
 	tests := []struct {
@@ -47,4 +50,16 @@ func TestFloat(t *testing.T) {
 			t.Errorf("Float(%f, %d) = %s; expected %s", test.value, test.decimalDigits, result, test.expected)
 		}
 	}
+}
+
+func ExampleFloat() {
+	fmt.Println(Float(100.1234, 3))
+	fmt.Println(Float(100.12, 3))
+	fmt.Println(Float(100.1, 3))
+	fmt.Println(Float(100, 3))
+	// Output:
+	// 100.123
+	// 100.12
+	// 100.1
+	// 100
 }
