@@ -76,6 +76,11 @@ type Integer interface {
 	~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr
 }
 
+// Numeric is a constraint that permits any integer or floating-point type.
+type Numeric interface {
+	~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr | ~float32 | ~float64
+}
+
 // SafeString represents a human readable representation of a value. It
 // implements a `SafeValue()` marker method (implementing the
 // github.com/cockroachdb/redact.SafeValue interface) to signal that it
