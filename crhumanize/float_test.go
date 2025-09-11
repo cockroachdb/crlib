@@ -33,6 +33,7 @@ func TestFloat(t *testing.T) {
 		{0.01, 1, "0"},
 		{0.01, 2, "0.01"},
 		{0.01, 4, "0.01"},
+		{-1.23456789, 2, "-1.23"},
 		{1.23456789, 2, "1.23"},
 		{1.23456789, 3, "1.235"},
 		{1.23456789, 3, "1.235"},
@@ -40,7 +41,9 @@ func TestFloat(t *testing.T) {
 		{123456.7777, 2, "123456.78"},
 		{123456.1010, 4, "123456.101"},
 		{123456.1010, 2, "123456.1"},
+		{-123456.1010, 1, "-123456.1"},
 		{123456.1010, 1, "123456.1"},
+		{-123456.1010, 0, "-123456"},
 		{123456.1010, 0, "123456"},
 	}
 
@@ -48,6 +51,30 @@ func TestFloat(t *testing.T) {
 		result := string(Float(test.value, test.decimalDigits))
 		if result != test.expected {
 			t.Errorf("Float(%f, %d) = %s; expected %s", test.value, test.decimalDigits, result, test.expected)
+		}
+	}
+}
+
+func TestShortFloat(t *testing.T) {
+	tests := []struct {
+		value    float64
+		expected string
+	}{
+		{0.0001, "0"},
+		{0.1234, "0.1"},
+		{-0.1234, "-0.1"},
+		{0.05, "0.1"},
+		{9.95, "10"},
+		{9.94, "9.9"},
+		{-9.95, "-10"},
+		{-9.94, "-9.9"},
+		{10.52345, "11"},
+	}
+
+	for _, test := range tests {
+		result := string(CompactFloat(test.value))
+		if result != test.expected {
+			t.Errorf("ShortFloat(%f) = %s; expected %s", test.value, result, test.expected)
 		}
 	}
 }

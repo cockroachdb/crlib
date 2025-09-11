@@ -15,14 +15,28 @@
 package crhumanize
 
 import (
+	"math"
 	"strconv"
 	"strings"
 )
 
+// Float formats the given float with the specified number of decimal digits.
+// Trailing 0 decimals are stripped.
 func Float(value float64, decimalDigits int) SafeString {
 	s := strconv.FormatFloat(value, 'f', decimalDigits, 64)
 	s = stripTrailingZeroDecimals(s)
 	return SafeString(s)
+}
+
+// CompactFloat formats the given float with at most one decimal digit.
+// Specifically: we show a decimal digit only when the integer part is a single
+// digit.
+func CompactFloat(value float64) SafeString {
+	decimalDigits := 0
+	if math.Abs(value) < 9.95 {
+		decimalDigits = 1
+	}
+	return Float(value, decimalDigits)
 }
 
 func stripTrailingZeroDecimals(s string) string {
