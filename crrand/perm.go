@@ -16,27 +16,24 @@
 // generation.
 package crrand
 
-import "math/bits"
+import (
+	"math/bits"
+	"math/rand/v2"
+)
 
 // MakePerm64 constructs a new Perm64 from a 64-bit seed, providing a
 // deterministic, pseudorandom, bijective mapping of 64-bit values X to 64-bit
 // values Y.
 func MakePerm64(seed uint64) Perm64 {
-	// derive 4 x 32-bit round keys from the 64-bit seed using only ARX ops.
-	const c0 = 0x9E3779B97F4A7C15 // golden ratio (used here as XOR salt)
-	const c1 = 0xC2B2AE3D27D4EB4F // a constant
-
-	var m Perm64
-	s0 := seed
-	s1 := bits.RotateLeft64(seed^c0, 13)
-	s2 := bits.RotateLeft64(seed^c1, 37)
-	s3 := bits.RotateLeft64(seed^c0^c1, 53)
-
-	m.seed[0] = uint32(s0)
-	m.seed[1] = uint32(s1 >> 32)
-	m.seed[2] = uint32(s2)
-	m.seed[3] = uint32(s3 >> 32)
-	return m
+	prng := rand.New(rand.NewPCG(seed, seed))
+	return Perm64{
+		seed: [4]uint32{
+			prng.Uint32(),
+			prng.Uint32(),
+			prng.Uint32(),
+			prng.Uint32(),
+		},
+	}
 }
 
 // A Perm64 provides a deterministic, pseudorandom permutation of 64-bit values.
