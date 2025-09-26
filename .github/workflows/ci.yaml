@@ -12,7 +12,6 @@ on:
 jobs:
 
   linux:
-    name: go-linux
     strategy:
       matrix:
         go: ["1.23", "1.24", "1.25"]
@@ -30,7 +29,6 @@ jobs:
       - run: go vet ./...
 
   linux-32bit:
-    name: go-linux-32bit
     strategy:
       matrix:
         go: ["1.23"]
@@ -47,7 +45,6 @@ jobs:
       - run: go test ./...
 
   darwin:
-    name: go-macos
     strategy:
       matrix:
         go: ["1.23"]
@@ -64,7 +61,6 @@ jobs:
       - run: go test ./...
 
   linux-stress:
-    name: go-linux-stress
     strategy:
       matrix:
         go: ["1.23"]
@@ -82,7 +78,6 @@ jobs:
       - run: go test ./... -exec 'stress -p 2 -maxruns 1000' -v
 
   linux-stress-race:
-    name: go-linux-stress-race
     strategy:
       matrix:
         go: ["1.23"]
@@ -98,3 +93,37 @@ jobs:
       - run: go install github.com/cockroachdb/stress@latest
       - run: go test -tags crlib_invariants ./... -race -exec 'stress -p 1 -maxruns 100' -v
       - run: go test ./... -race -exec 'stress -p 1 -maxruns 100' -v
+
+  linux-cockroach-go:
+    runs-on: ubuntu-latest
+    env:
+      GO_BRANCH: cockroach-go1.23.12
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Step 1: Fetch the branch tip SHA for cache key
+      - name: Get cockroachdb/go commit hash
+        id: go-sha
+        run: |
+          SHA=$(git ls-remote https://github.com/cockroachdb/go.git refs/heads/$GO_BRANCH | cut -f1)
+          echo "GO_SHA=$SHA" >> $GITHUB_ENV
+
+      # Step 2: Restore cache (per branch + commit SHA)
+      - name: Cache custom Go toolchain
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/cockroachdb-go/${{ env.GO_SHA }}
+          key: cockroachdb-${{ env.GO_SHA }}
+
+      # Step 3: Install bootstrap Go (needed to build fork)
+      - name: Install bootstrap Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23.x"
+
+      # Step 4: Run tests with custom Go
+      - run: ./scripts/run-tests-with-custom-go.sh ./...
+      - run: ./scripts/run-tests-with-custom-go.sh -tags crlib_invariants ./...
+      - run: ./scripts/run-tests-with-custom-go.sh -race ./...
+
