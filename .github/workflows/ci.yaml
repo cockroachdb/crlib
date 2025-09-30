@@ -15,7 +15,7 @@ jobs:
     name: go-linux
     strategy:
       matrix:
-        go: ["1.22", "1.23"]
+        go: ["1.23", "1.24", "1.25"]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -33,7 +33,7 @@ jobs:
     name: go-linux-32bit
     strategy:
       matrix:
-        go: ["1.22"]
+        go: ["1.23"]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -50,7 +50,7 @@ jobs:
     name: go-macos
     strategy:
       matrix:
-        go: ["1.22"]
+        go: ["1.23"]
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v2
@@ -67,7 +67,7 @@ jobs:
     name: go-linux-stress
     strategy:
       matrix:
-        go: ["1.22"]
+        go: ["1.23"]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -85,7 +85,7 @@ jobs:
     name: go-linux-stress-race
     strategy:
       matrix:
-        go: ["1.22"]
+        go: ["1.23"]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
