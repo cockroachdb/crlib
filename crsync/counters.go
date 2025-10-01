@@ -169,8 +169,14 @@ func (c *Counters) All() iter.Seq[int64] {
 		// counters at a time.
 		var vals [countersPerCacheLine]int64
 		for i := 0; i < c.numCounters; i += countersPerCacheLine {
-			vals = [countersPerCacheLine]int64{}
+			// We have a total of c.numCounters logical counters and we are processing
+			// countersPerCacheLine logical counters at a time. So the last iteration
+			// of this loop will have fewer than countersPerCacheLine logical counters
+			// to read. n is the number of logical counters to read in this iteration.
 			n := min(c.numCounters-i, countersPerCacheLine)
+			// Iterate over all the shards and for this logical cache line, read the
+			// physical cache line from each shard and aggregate into vals.
+			vals = [countersPerCacheLine]int64{}
 			for s := range c.numShards {
 				start := int(s*c.shardSize) + i
 				counters := c.counters[start : start+n]
@@ -180,6 +186,9 @@ func (c *Counters) All() iter.Seq[int64] {
 					vals[j] += counters[j].Load()
 				}
 			}
+			// Yield the values for the next set of n logical counters. Across the
+			// iterations of the outer loop we will in total yield c.numCounters
+			// values.
 			for j := range n {
 				if !yield(vals[j]) {
 					return
