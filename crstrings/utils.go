@@ -117,3 +117,45 @@ func Indent(prepend, str string) string {
 	}
 	return b.String()
 }
+
+// UnwrapText reformats wrapped lines by replacing single newlines with spaces,
+// while preserving blank-line paragraph breaks. This allows defining long
+// strings in a readable fashion.
+//
+// More specifically:
+//   - the input string is broken up into lines;
+//   - each line is trimmed of leading and trailing whitespace;
+//   - leading or trailing empty lines are discarded;
+//   - each run of non-empty lines is joined into a single line, with a space
+//     separator;
+//   - resulting single lines are joined with a blank line in-between.
+//
+// For example:
+// UnwrapText(`
+//
+//	This is a paragraph that
+//	is wrapped on multiple lines.
+//
+//	This is another paragraph.
+//
+// `)
+// returns
+// "This is a paragraph that is wrapped on multiple lines.\n\nThis is another paragraph."
+func UnwrapText(input string) string {
+	var buf strings.Builder
+
+	var separator string
+	for _, l := range strings.Split(input, "\n") {
+		l = strings.TrimSpace(l)
+		if l == "" {
+			separator = "\n\n"
+		} else {
+			if buf.Len() > 0 {
+				buf.WriteString(separator)
+			}
+			buf.WriteString(l)
+			separator = " "
+		}
+	}
+	return buf.String()
+}
