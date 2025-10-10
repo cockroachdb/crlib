@@ -27,6 +27,14 @@ import (
 // used.
 type Mono time.Duration
 
+type ClockReading[T any] interface {
+	// Add returns a ClockReading time.Duration in the future from a given
+	// ClockReading.
+	Add(time.Duration) T
+	// Sub returns the duration elapsed between two clock readings.
+	Sub(T) time.Duration
+}
+
 // NowMono returns a moment in time in terms of a monotonic clock. It is faster
 // than time.Now which also consults the wall clock.
 func NowMono() Mono {
@@ -37,6 +45,11 @@ func NowMono() Mono {
 // Sub returns the duration that elapsed between two moments.
 func (m Mono) Sub(other Mono) time.Duration {
 	return time.Duration(m - other)
+}
+
+// Add returns the time.Mono m+d.
+func (m Mono) Add(d time.Duration) Mono {
+	return Mono(time.Duration(m) + d)
 }
 
 // Elapsed returns the duration that elapsed since m.
