@@ -1,8 +1,8 @@
 module github.com/cockroachdb/crlib/internal/devtools
 
-go 1.23
+go 1.24
 
-toolchain go1.24.2
+toolchain go1.24.10
 
 require (
 	github.com/cockroachdb/crlfmt v0.2.1

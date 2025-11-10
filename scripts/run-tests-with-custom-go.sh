@@ -14,7 +14,7 @@ GO_REPO="https://github.com/cockroachdb/go.git"
 GO_SHA="${GO_SHA:-}"
 
 if [ -z "$GO_SHA" ]; then
-  GO_BRANCH="${GO_BRANCH:-cockroach-go1.23.12}"
+  GO_BRANCH="${GO_BRANCH:-cockroach-go1.25.3}"
   echo "==> Resolving latest SHA for branch $GO_BRANCH..."
   GO_SHA=$(git ls-remote "$GO_REPO" "refs/heads/$GO_BRANCH" | cut -f1)
 fi
