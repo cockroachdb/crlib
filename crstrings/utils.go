@@ -16,6 +16,7 @@ package crstrings
 
 import (
 	"fmt"
+	"iter"
 	"slices"
 	"strings"
 )
@@ -87,15 +88,20 @@ func FilterEmpty(elems []string) []string {
 
 // Lines breaks up the given string into lines.
 func Lines(s string) []string {
+	return slices.Collect(LinesSeq(s))
+}
+
+// LinesSeq returns an iterator over the lines of the given string.
+func LinesSeq(s string) iter.Seq[string] {
 	// Remove any trailing newline (to avoid getting an extraneous empty line at
 	// the end).
 	s = strings.TrimSuffix(s, "\n")
 	if s == "" {
-		// In this case, Split returns a slice with a single empty string (which is
-		// not what we want).
-		return nil
+		// In this case, SplitSeq returns an iterator with a single empty string
+		// (which is not what we want).
+		return func(yield func(string) bool) {}
 	}
-	return strings.Split(s, "\n")
+	return strings.SplitSeq(s, "\n")
 }
 
 // Indent prepends a string to every line of the given string.
