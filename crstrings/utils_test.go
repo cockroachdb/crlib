@@ -91,3 +91,37 @@ func TestIndent(t *testing.T) {
 		require.Equal(t, tc[1], Indent("--", tc[0]))
 	}
 }
+
+func TestUnwrapText(t *testing.T) {
+	expected := "This is a single line string. It looks fine."
+
+	require.Equal(t, expected, UnwrapText(`This
+is a single line string.
+It looks fine.`))
+
+	require.Equal(t, expected, UnwrapText(`
+
+
+		This
+		is a single line string.
+		It looks
+		fine.
+
+	`))
+
+	expected = "This is a paragraph that is wrapped on multiple lines.\n\nThis is another paragraph."
+	require.Equal(t, expected, UnwrapText(`This is a paragraph that
+		is wrapped on multiple lines.
+	
+		This is another
+		paragraph.`))
+
+	require.Equal(t, expected, UnwrapText(`
+	
+		This is a paragraph that
+		is wrapped on multiple lines.
+
+		This is another paragraph.
+	
+	`))
+}
