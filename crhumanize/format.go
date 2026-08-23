@@ -24,7 +24,8 @@ type FmtFlag uint8
 
 const (
 	// Exact formats the value without loss of precision; the result can always be
-	// parsed back into the original value.
+	// parsed back into the original value (using a ParseIEC variant if OmitI is
+	// also used).
 	//
 	// Examples: "1,000 B", "1,234 KiB", "21,000 GiB", "1,000,000 B".
 	Exact FmtFlag = iota
@@ -32,8 +33,9 @@ const (
 	// Compact omits the space between the value and the unit.
 	Compact
 
-	// OmitI omits the "i" in the IEC units. Use with care: the result should
-	// never be parsed back, as the units will be interpreted as SI units.
+	// OmitI omits the "i" in the IEC units. Use with care: the result must be
+	// parsed back with the ParseIEC variants, as the units would otherwise be
+	// interpreted as SI units.
 	OmitI
 
 	numFlags
@@ -89,11 +91,6 @@ func formatUint64(b *strings.Builder, value uint64, units Units, unit string, fl
 		b.WriteByte(' ')
 	}
 	if flagBitmap[OmitI] {
-		if flagBitmap[Exact] {
-			// Exact guarantees that the value will be parsed back exactly, which is
-			// not the case if we omit the i in IEC units.
-			panic("Exact and OmitI flags cannot be used together")
-		}
 		unitPrefix = strings.TrimSuffix(unitPrefix, "i")
 	}
 	b.WriteString(unitPrefix)

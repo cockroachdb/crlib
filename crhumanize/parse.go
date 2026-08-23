@@ -24,12 +24,31 @@ import (
 // Parse a string representation of a humanized value.
 //
 // Unless they have the i indicator, the units are interpreted as SI units. For
-// example, "1 K" = 1,000 whereas "1 Ki" = 1,024.
+// example, "1 K" = 1,000 whereas "1 Ki" = 1,024. See ParseIEC to interpret all
+// units as IEC units.
 //
 // An arbitrary unit can be specified; it is optional in the string. The space
 // separator is also optional.
 func Parse[T Integer](s string, unit string) (T, error) {
-	value, scale, err := preParse(s, unit)
+	return parse[T](s, unit, false /* forceIEC */)
+}
+
+// ParseIEC parses a string representation of a humanized value, interpreting
+// the units as IEC units whether or not they have the i indicator. For example,
+// both "1 K" and "1 Ki" are 1,024.
+//
+// ParseIEC can parse any string produced by Format with IEC units, including
+// when the OmitI flag is used. As with Parse, the value is recovered exactly
+// only if the string was formatted with the Exact flag.
+//
+// An arbitrary unit can be specified; it is optional in the string. The space
+// separator is also optional.
+func ParseIEC[T Integer](s string, unit string) (T, error) {
+	return parse[T](s, unit, true /* forceIEC */)
+}
+
+func parse[T Integer](s string, unit string, forceIEC bool) (T, error) {
+	value, scale, err := preParse(s, unit, forceIEC)
 	if err != nil {
 		return T(0), err
 	}
@@ -74,7 +93,7 @@ func Parse[T Integer](s string, unit string) (T, error) {
 	return T(value.Int64()), nil
 }
 
-func preParse(s string, unit string) (value *big.Int, scale uint64, _ error) {
+func preParse(s string, unit string, forceIEC bool) (value *big.Int, scale uint64, _ error) {
 	s = strings.TrimSpace(s)
 
 	numStr := s
@@ -98,7 +117,7 @@ func preParse(s string, unit string) (value *big.Int, scale uint64, _ error) {
 		return nil, 0, fmt.Errorf("cannot parse number from %q", s)
 	}
 
-	scale, err = parseUnit(suffix)
+	scale, err = parseUnit(suffix, forceIEC)
 	if err != nil {
 		return nil, 0, fmt.Errorf("cannot parse %q: %v", s, err)
 	}

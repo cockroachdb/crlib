@@ -26,11 +26,25 @@ func Bytes[T Integer](bytes T, flags ...FmtFlag) SafeString {
 // ParseBytes parses a string representation of a byte value.
 //
 // Unless they have the i indicator, the units are interpreted as SI units. For
-// example, "1 KB" = 1,000 whereas "1 KiB" = 1,024.
+// example, "1 KB" = 1,000 whereas "1 KiB" = 1,024. See ParseBytesIEC to
+// interpret all units as IEC units.
 //
 // The space separator and the B suffix are optional.
 func ParseBytes[T Integer](s string) (T, error) {
 	return Parse[T](s, "B")
+}
+
+// ParseBytesIEC parses a string representation of a byte value, interpreting
+// the units as IEC units whether or not they have the i indicator. For example,
+// both "1 KB" and "1 KiB" are 1,024.
+//
+// ParseBytesIEC can parse any string produced by Bytes, including when the
+// OmitI flag is used. As with ParseBytes, the value is recovered exactly only
+// if the string was formatted with the Exact flag.
+//
+// The space separator and the B suffix are optional.
+func ParseBytesIEC[T Integer](s string) (T, error) {
+	return ParseIEC[T](s, "B")
 }
 
 // BytesPerSec formats a bytes-per-second value in IEC units.
@@ -45,11 +59,25 @@ func BytesPerSec[T Integer](bytes T, flags ...FmtFlag) SafeString {
 // ParseBytesPerSec parses a string representation of a bytes-per-second value.
 //
 // Unless they have the i indicator, the units are interpreted as SI units. For
-// example, "1 KB/s" = 1,000 whereas "1 KiB/s" = 1,024.
+// example, "1 KB/s" = 1,000 whereas "1 KiB/s" = 1,024. See ParseBytesPerSecIEC
+// to interpret all units as IEC units.
 //
 // The space separator and the B/s suffix are optional.
 func ParseBytesPerSec[T Integer](s string) (T, error) {
 	return Parse[T](s, "B/s")
+}
+
+// ParseBytesPerSecIEC parses a string representation of a bytes-per-second
+// value, interpreting the units as IEC units whether or not they have the i
+// indicator. For example, both "1 KB/s" and "1 KiB/s" are 1,024.
+//
+// ParseBytesPerSecIEC can parse any string produced by BytesPerSec, including
+// when the OmitI flag is used. As with ParseBytesPerSec, the value is recovered
+// exactly only if the string was formatted with the Exact flag.
+//
+// The space separator and the B/s suffix are optional.
+func ParseBytesPerSecIEC[T Integer](s string) (T, error) {
+	return ParseIEC[T](s, "B/s")
 }
 
 // Count formats a unitless value in SI units.

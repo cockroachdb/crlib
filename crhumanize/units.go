@@ -69,13 +69,20 @@ func (u Units) Exact(value uint64) (scaled uint64, prefix string) {
 	return value / u.scales[n-1], u.prefixes[n-1]
 }
 
-func parseUnit(s string) (scale uint64, _ error) {
+// parseUnit returns the scale corresponding to a unit prefix.
+//
+// If forceIEC is set, prefixes without the i indicator are interpreted as IEC
+// units as well (e.g. "K" is 1,024 instead of 1,000).
+func parseUnit(s string, forceIEC bool) (scale uint64, _ error) {
 	if s == "" {
 		return 1, nil
 	}
 	for _, u := range []Units{SI, IEC} {
 		for i := range u.prefixes {
 			if strings.EqualFold(s, u.prefixes[i]) {
+				if forceIEC {
+					return IEC.scales[i], nil
+				}
 				return u.scales[i], nil
 			}
 		}
