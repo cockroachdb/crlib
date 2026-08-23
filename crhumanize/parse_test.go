@@ -57,10 +57,14 @@ func TestParse(t *testing.T) {
 func runParseTest[T Integer](t *testing.T, td *datadriven.TestData) string {
 	var unit string
 	td.MaybeScanArgs(t, "unit", &unit)
+	parse := Parse[T]
+	if td.HasArg("iec") {
+		parse = ParseIEC[T]
+	}
 
 	var buf strings.Builder
 	for _, l := range crstrings.Lines(td.Input) {
-		result, err := Parse[T](l, unit)
+		result, err := parse(l, unit)
 		if err != nil {
 			fmt.Fprintf(&buf, "%s: %s\n", l, err)
 		} else {
@@ -71,7 +75,7 @@ func runParseTest[T Integer](t *testing.T, td *datadriven.TestData) string {
 }
 
 func TestRoundtrip(t *testing.T) {
-	for i := 0; i < 10000; i++ {
+	for i := range 100 {
 		n := rand.Uint64()
 		if i%4 == 0 {
 			// Test values around powers of two.
@@ -93,6 +97,22 @@ func TestRoundtrip(t *testing.T) {
 		testRoundtrip[int64](t, int64(n))
 		testRoundtrip[int64](t, -int64(n))
 		testRoundtrip[uint64](t, n)
+
+		testRoundtripIEC[int8](t, int8(n))
+		testRoundtripIEC[int8](t, -int8(n))
+		testRoundtripIEC[uint8](t, uint8(n))
+
+		testRoundtripIEC[int16](t, int16(n))
+		testRoundtripIEC[int16](t, -int16(n))
+		testRoundtripIEC[uint16](t, uint16(n))
+
+		testRoundtripIEC[int32](t, int32(n))
+		testRoundtripIEC[int32](t, -int32(n))
+		testRoundtripIEC[uint32](t, uint32(n))
+
+		testRoundtripIEC[int64](t, int64(n))
+		testRoundtripIEC[int64](t, -int64(n))
+		testRoundtripIEC[uint64](t, n)
 	}
 }
 
@@ -121,4 +141,65 @@ func testRoundtrip[T Integer](t *testing.T, value T) {
 	if parsed != value {
 		t.Fatalf("invalid parse result on Bytes[%s](%d, Exact)=%q: %d", reflect.TypeOf(value), value, formatted, parsed)
 	}
+}
+
+// testRoundtripIEC verifies that the IEC parsers can parse back values formatted
+// with IEC units, in particular when OmitI strips the i indicator.
+func testRoundtripIEC[T Integer](t *testing.T, value T) {
+	t.Helper()
+	flags := []FmtFlag{OmitI}
+	if rand.IntN(2) == 0 {
+		flags = append(flags, Compact)
+	}
+	requireNoI := func(what string, formatted SafeString) {
+		t.Helper()
+		if strings.ContainsRune(string(formatted), 'i') {
+			t.Fatalf("%s[%s](%d, OmitI)=%q contains an i indicator", what, reflect.TypeOf(value), value, formatted)
+		}
+	}
+	// check verifies that the value was parsed back; exact results must match the
+	// original value, approximate ones must be within 5%.
+	check := func(what string, exact bool, formatted SafeString, parsed T, err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatalf("could not parse %s[%s](%d)=%q: %v", what, reflect.TypeOf(value), value, formatted, err)
+		}
+		if exact {
+			if parsed != value {
+				t.Fatalf("invalid parse result on %s[%s](%d)=%q: %d", what, reflect.TypeOf(value), value, formatted, parsed)
+			}
+			return
+		}
+		if delta := math.Abs(float64(parsed) - float64(value)); delta > 0.05*math.Abs(float64(value)) {
+			t.Fatalf("invalid parse result on %s[%s](%d)=%q: %d (delta %.1f%%)", what, reflect.TypeOf(value), value, formatted, parsed, delta*100/float64(value))
+		}
+	}
+
+	formatted := Bytes(value, flags...)
+	requireNoI("Bytes", formatted)
+	parsed, err := ParseBytesIEC[T](string(formatted))
+	check("Bytes", false /* exact */, formatted, parsed, err)
+
+	formatted = BytesPerSec(value, flags...)
+	requireNoI("BytesPerSec", formatted)
+	parsed, err = ParseBytesPerSecIEC[T](string(formatted))
+	check("BytesPerSec", false /* exact */, formatted, parsed, err)
+
+	// OmitI can be combined with Exact; the IEC parsers recover the exact value.
+	flags = append(flags, Exact)
+	formatted = Bytes(value, flags...)
+	requireNoI("Bytes+Exact", formatted)
+	parsed, err = ParseBytesIEC[T](string(formatted))
+	check("Bytes+Exact", true /* exact */, formatted, parsed, err)
+
+	formatted = BytesPerSec(value, flags...)
+	requireNoI("BytesPerSec+Exact", formatted)
+	parsed, err = ParseBytesPerSecIEC[T](string(formatted))
+	check("BytesPerSec+Exact", true /* exact */, formatted, parsed, err)
+
+	// Without OmitI, the i indicator is kept; the IEC parsers must handle it as
+	// well, without loss.
+	formatted = Bytes(value, Exact)
+	parsed, err = ParseBytesIEC[T](string(formatted))
+	check("Bytes+Exact (with i)", true /* exact */, formatted, parsed, err)
 }

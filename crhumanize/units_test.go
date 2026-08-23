@@ -53,35 +53,70 @@ func TestRound(t *testing.T) {
 	}
 }
 
+// TestUnitTables verifies that the SI and IEC tables are parallel: the prefixes
+// correspond to each other one-to-one (differing only by the i indicator) and
+// the corresponding scales are within 20% of each other. parseUnit relies on
+// this correspondence to map an SI prefix to the equivalent IEC scale.
+func TestUnitTables(t *testing.T) {
+	if len(SI.prefixes) != len(IEC.prefixes) {
+		t.Fatalf("SI and IEC have a different number of prefixes: %d vs %d", len(SI.prefixes), len(IEC.prefixes))
+	}
+	for i := range SI.prefixes {
+		if IEC.prefixes[i] != SI.prefixes[i]+"i" {
+			t.Errorf("%d: IEC prefix %q does not correspond to SI prefix %q", i, IEC.prefixes[i], SI.prefixes[i])
+		}
+		if ratio := float64(IEC.scales[i]) / float64(SI.scales[i]); math.Abs(ratio-1) > 0.2 {
+			t.Errorf("%d: IEC scale %d and SI scale %d differ by more than 20%%", i, IEC.scales[i], SI.scales[i])
+		}
+	}
+}
+
 func TestParseUnit(t *testing.T) {
 	testCases := []struct {
-		unit     string
-		expected uint64
+		unit        string
+		expected    uint64
+		expectedIEC uint64
 	}{
-		{"", 1},
+		{"", 1, 1},
 
-		{"K", 1000},
-		{"m", 1000 * 1000},
-		{"G", 1000 * 1000 * 1000},
-		{"T", 1000 * 1000 * 1000 * 1000},
-		{"p", 1000 * 1000 * 1000 * 1000 * 1000},
-		{"E", 1000 * 1000 * 1000 * 1000 * 1000 * 1000},
+		{"K", 1000, 1024},
+		{"m", 1000 * 1000, 1024 * 1024},
+		{"G", 1000 * 1000 * 1000, 1024 * 1024 * 1024},
+		{"T", 1000 * 1000 * 1000 * 1000, 1024 * 1024 * 1024 * 1024},
+		{"p", 1000 * 1000 * 1000 * 1000 * 1000, 1024 * 1024 * 1024 * 1024 * 1024},
+		{"E", 1000 * 1000 * 1000 * 1000 * 1000 * 1000, 1024 * 1024 * 1024 * 1024 * 1024 * 1024},
 
-		{"Ki", 1024},
-		{"MI", 1024 * 1024},
-		{"gI", 1024 * 1024 * 1024},
-		{"Ti", 1024 * 1024 * 1024 * 1024},
-		{"pI", 1024 * 1024 * 1024 * 1024 * 1024},
-		{"eI", 1024 * 1024 * 1024 * 1024 * 1024 * 1024},
+		{"Ki", 1024, 1024},
+		{"MI", 1024 * 1024, 1024 * 1024},
+		{"gI", 1024 * 1024 * 1024, 1024 * 1024 * 1024},
+		{"Ti", 1024 * 1024 * 1024 * 1024, 1024 * 1024 * 1024 * 1024},
+		{"pI", 1024 * 1024 * 1024 * 1024 * 1024, 1024 * 1024 * 1024 * 1024 * 1024},
+		{"eI", 1024 * 1024 * 1024 * 1024 * 1024 * 1024, 1024 * 1024 * 1024 * 1024 * 1024 * 1024},
 	}
 	for i, tc := range testCases {
-		scale, err := parseUnit(tc.unit)
-		if err != nil {
-			t.Errorf("%d: unexpected error for unit %s: %v", i, tc.unit, err)
-			continue
+		for _, forceIEC := range []bool{false, true} {
+			expected := tc.expected
+			if forceIEC {
+				expected = tc.expectedIEC
+			}
+			scale, err := parseUnit(tc.unit, forceIEC)
+			if err != nil {
+				t.Errorf("%d: unexpected error for unit %s (forceIEC=%t): %v", i, tc.unit, forceIEC, err)
+				continue
+			}
+			if scale != expected {
+				t.Errorf("%d: expected %d for unit %s (forceIEC=%t), got %d", i, expected, tc.unit, forceIEC, scale)
+			}
 		}
-		if scale != tc.expected {
-			t.Errorf("%d: expected %d for unit %s, got %d", i, tc.expected, tc.unit, scale)
+	}
+
+	// Unknown prefixes must be rejected, with or without forceIEC.
+	invalid := []string{"X", "Xi", "i", "I", "KK", "KiB", "1", "K i", " K"}
+	for _, unit := range invalid {
+		for _, forceIEC := range []bool{false, true} {
+			if scale, err := parseUnit(unit, forceIEC); err == nil {
+				t.Errorf("expected error for unit %q (forceIEC=%t), got %d", unit, forceIEC, scale)
+			}
 		}
 	}
 }

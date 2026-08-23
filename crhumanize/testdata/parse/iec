@@ -1,0 +1,80 @@
+uint64 iec
+1
+1,234
+1,234 Mi
+1,234 M
+1k
+1Ki
+1.2 K
+1.2 Ki
+.9 K
+0.9 Ki
+8.1t
+8.1 Ti
+16E
+16Ei
+----
+1: 1
+1,234: 1234
+1,234 Mi: 1293942784
+1,234 M: 1293942784
+1k: 1024
+1Ki: 1024
+1.2 K: 1229
+1.2 Ki: 1229
+.9 K: 922
+0.9 Ki: 922
+8.1t: 8906044184986
+8.1 Ti: 8906044184986
+16E: 18446744073709551615
+16Ei: 18446744073709551615
+
+uint64 iec unit=B
+1B
+1 KB
+1 KiB
+1.5MB
+1.5 MiB
+2 GB
+1 XB
+----
+1B: 1
+1 KB: 1024
+1 KiB: 1024
+1.5MB: 1572864
+1.5 MiB: 1572864
+2 GB: 2147483648
+1 XB: cannot parse "1 XB": unknown unit "X"
+
+int64 iec unit=B/s
+-1 B/s
+-1.5 KB/s
+-1.5 KiB/s
+8 EB/s
+9 EB/s
+----
+-1 B/s: -1
+-1.5 KB/s: -1536
+-1.5 KiB/s: -1536
+8 EB/s: 9223372036854775807
+9 EB/s: cannot parse value from "9 EB/s": out of range
+
+int32 iec
+2 G
+2 Gi
+2.1 G
+-2 G
+----
+2 G: 2147483647
+2 Gi: 2147483647
+2.1 G: cannot parse value from "2.1 G": out of range
+-2 G: -2147483648
+
+uint8 iec
+.25K
+.25Ki
+1 K
+----
+.25K: 255
+.25Ki: 255
+1 K: cannot parse value from "1 K": out of range
