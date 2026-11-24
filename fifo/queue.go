@@ -15,6 +15,7 @@
 package fifo
 
 import (
+	"iter"
 	"sync"
 
 	"github.com/cockroachdb/crlib/internal/invariants"
@@ -24,8 +25,9 @@ import (
 // concurrent access.
 //
 // Note that the queue provides pointer access to the internal storage (via
-// PeekFront and PushBack) so it must be used with care. These pointers must not
-// be used once the respective element is popped out of the queue.
+// PeekFront, PeekBack, All and PushBack) so it must be used with care. These
+// pointers must not be used once the respective element is popped out of the
+// queue.
 //
 // -- Implementation --
 //
@@ -81,6 +83,32 @@ func (q *Queue[T]) PeekFront() *T {
 		return nil
 	}
 	return q.head.PeekFront()
+}
+
+// PeekBack returns the current tail of the queue, or nil if the queue is
+// empty.
+//
+// The result is only valid until the element is removed from the queue.
+func (q *Queue[T]) PeekBack() *T {
+	if q.len == 0 {
+		return nil
+	}
+	return q.tail.PeekBack()
+}
+
+// All returns an iterator over pointers to the elements of the queue, from
+// front to back. The queue must not be modified during the iteration; the
+// pointers are valid until the respective element is removed from the queue.
+func (q *Queue[T]) All() iter.Seq[*T] {
+	return func(yield func(*T) bool) {
+		for n := q.head; n != nil; n = n.next {
+			for i := int32(0); i < n.len; i++ {
+				if !yield(&n.buf[(n.head+i)%queueNodeSize]) {
+					return
+				}
+			}
+		}
+	}
 }
 
 // PopFront removes the current head of the queue.
@@ -152,6 +180,10 @@ func (qn *queueNode[T]) PushBack(t T) *T {
 
 func (qn *queueNode[T]) PeekFront() *T {
 	return &qn.buf[qn.head]
+}
+
+func (qn *queueNode[T]) PeekBack() *T {
+	return &qn.buf[(qn.head+qn.len-1)%queueNodeSize]
 }
 
 func (qn *queueNode[T]) PopFront() T {
